@@ -10,7 +10,7 @@ export type CompromissoTipo =
 
 export type CompromissoStatus = 'confirmado' | 'pendente' | 'cancelado'
 
-export type CalendarViewType = 'mes' | 'semana' | 'dia' | 'agenda'
+export type CalendarViewType = 'mes' | 'semana' | 'dia' | 'agenda' | 'ano'
 
 // =============================================================================
 // ENTIDADES
@@ -65,4 +65,5 @@ export const VIEW_LABELS: Record<CalendarViewType, string> = {
   semana:  'Semana',
   dia:     'Dia',
   agenda:  'Agenda',
+  ano:     'Ano',
 }

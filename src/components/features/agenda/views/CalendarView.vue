@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { Compromisso, CalendarViewType, CompromissoPayload } from '../../../../types/agenda'
-import { addDays, addWeeks, addMonths } from '../../../../utils/dateUtils'
+import { addDays, addWeeks, addMonths, addYears } from '../../../../utils/dateUtils'
 import { useAgenda } from '../../../../composables/useAgenda'
 import CalendarHeader  from '../CalendarHeader.vue'
 import CalendarMonth   from './CalendarMonth.vue'
 import CalendarWeek    from './CalendarWeek.vue'
 import CalendarDay     from './CalendarDay.vue'
 import CalendarAgenda  from './CalendarAgenda.vue'
+import CalendarYear    from './CalendarYear.vue'
 import CompromissoModal from '../CompromissoModal.vue'
 
 // ---- Estado ----
@@ -19,7 +20,7 @@ const editingCompromisso = ref<Compromisso | null>(null)
 const modalDefaultDate  = ref<Date | null>(null)
 
 // ---- Composable ----
-const { getByDay, getByMonth, addCompromisso, updateCompromisso, removeCompromisso } = useAgenda()
+const { getByMonth, addCompromisso, updateCompromisso } = useAgenda()
 
 // ---- Compromissos filtrados para a view atual ----
 const viewCompromissos = computed(() => {
@@ -36,6 +37,12 @@ const viewCompromissos = computed(() => {
       return getByMonth(d.getFullYear(), d.getMonth())
         .concat(getByMonth(d.getFullYear(), d.getMonth() + 1))
         .concat(getByMonth(d.getFullYear(), d.getMonth() + 2))
+    case 'ano': {
+      // Todos os compromissos do ano
+      const all = []
+      for (let m = 0; m < 12; m++) all.push(...getByMonth(d.getFullYear(), m))
+      return all
+    }
     default:
       return []
   }
@@ -48,6 +55,7 @@ function navigatePrev() {
     case 'semana': currentDate.value = addWeeks(currentDate.value, -1);  break
     case 'dia':    currentDate.value = addDays(currentDate.value, -1);   break
     case 'agenda': currentDate.value = addDays(currentDate.value, -7);   break
+    case 'ano':    currentDate.value = addYears(currentDate.value, -1);  break
   }
 }
 
@@ -57,6 +65,7 @@ function navigateNext() {
     case 'semana': currentDate.value = addWeeks(currentDate.value, 1);  break
     case 'dia':    currentDate.value = addDays(currentDate.value, 1);   break
     case 'agenda': currentDate.value = addDays(currentDate.value, 7);   break
+    case 'ano':    currentDate.value = addYears(currentDate.value, 1);  break
   }
 }
 
@@ -92,7 +101,7 @@ function handleSave(payload: CompromissoPayload, id?: string) {
 
 // ---- Slot click: navegar para o dia e abrir modal ----
 function handleSlotClick(date: Date) {
-  if (currentView.value === 'mes' || currentView.value === 'agenda') {
+  if (currentView.value === 'mes' || currentView.value === 'agenda' || currentView.value === 'ano') {
     currentDate.value  = date
     currentView.value  = 'dia'
   } else {
@@ -141,6 +150,12 @@ function handleSlotClick(date: Date) {
         :compromissos="viewCompromissos"
         @slot-click="handleSlotClick"
         @compromisso-click="openEditModal"
+      />
+      <CalendarYear
+        v-else-if="currentView === 'ano'"
+        :current-date="currentDate"
+        :compromissos="viewCompromissos"
+        @day-click="handleSlotClick"
       />
     </div>
 

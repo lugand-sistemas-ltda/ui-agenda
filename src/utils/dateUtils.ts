@@ -190,3 +190,9 @@ export function addMonths(date: Date, months: number): Date {
 export function addWeeks(date: Date, weeks: number): Date {
   return addDays(date, weeks * 7)
 }
+
+export function addYears(date: Date, years: number): Date {
+  const d = new Date(date)
+  d.setFullYear(d.getFullYear() + years)
+  return d
+}
