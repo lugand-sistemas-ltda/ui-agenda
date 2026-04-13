@@ -17,7 +17,7 @@ const emit = defineEmits<{
   newCompromisso: []
 }>()
 
-const views: CalendarViewType[] = ['mes', 'semana', 'dia', 'agenda', 'ano']
+const views: CalendarViewType[] = ['ano','mes', 'semana', 'dia', 'agenda']
 
 function periodLabel(): string {
   const d = props.currentDate
