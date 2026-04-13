@@ -1,0 +1,22 @@
+@use '../abstracts' as *;
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: $font-weight-semibold;
+  line-height: $line-height-tight;
+  color: var(--color-text-primary);
+}
+
+h1 { font-size: $font-size-2xl; }
+h2 { font-size: $font-size-xl; }
+h3 { font-size: $font-size-lg; }
+h4, h5, h6 { font-size: $font-size-base; }
+
+p {
+  color: var(--color-text-secondary);
+  line-height: $line-height-base;
+}
+
+small {
+  font-size: $font-size-xs;
+  color: var(--color-text-secondary);
+}

@@ -1,0 +1,47 @@
+// Tema padrão (aplicado em :root) — ativado também com [data-theme="light"]
+:root,
+[data-theme='light'] {
+  // Backgrounds
+  --color-bg:             #ffffff;
+  --color-surface:        #f4f4f5;
+  --color-surface-raised: #ffffff;
+
+  // Borders
+  --color-border:         #e4e4e7;
+  --color-border-subtle:  #f0f0f2;
+
+  // Text
+  --color-text-primary:   #18181b;
+  --color-text-secondary: #71717a;
+  --color-text-disabled:  #a1a1aa;
+
+  // Accent (ações, destaques)
+  --color-accent:         #3b82f6;
+  --color-accent-hover:   #2563eb;
+  --color-accent-subtle:  #eff6ff;
+  --color-accent-text:    #ffffff;
+
+  // Status de agendamento
+  --color-status-confirmed: #22c55e;
+  --color-status-pending:   #f59e0b;
+  --color-status-cancelled: #ef4444;
+  --color-status-bg-confirmed: #f0fdf4;
+  --color-status-bg-pending:   #fffbeb;
+  --color-status-bg-cancelled: #fef2f2;
+
+  // Shadows
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.10);
+
+  // Tipos de compromisso
+  --color-tipo-feriado:              #10b981;
+  --color-tipo-feriado-bg:           #ecfdf5;
+  --color-tipo-ponto-facultativo:    #f59e0b;
+  --color-tipo-ponto-facultativo-bg: #fffbeb;
+  --color-tipo-oitiva:               #6366f1;
+  --color-tipo-oitiva-bg:            #eef2ff;
+  --color-tipo-operacao:             #f97316;
+  --color-tipo-operacao-bg:          #fff7ed;
+  --color-tipo-livre:                #71717a;
+  --color-tipo-livre-bg:             #f4f4f5;
+}

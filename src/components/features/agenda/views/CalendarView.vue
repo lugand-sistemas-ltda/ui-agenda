@@ -1,0 +1,178 @@
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import type { Compromisso, CalendarViewType, CompromissoPayload } from '../../../../types/agenda'
+import { addDays, addWeeks, addMonths } from '../../../../utils/dateUtils'
+import { useAgenda } from '../../../../composables/useAgenda'
+import CalendarHeader  from '../CalendarHeader.vue'
+import CalendarMonth   from './CalendarMonth.vue'
+import CalendarWeek    from './CalendarWeek.vue'
+import CalendarDay     from './CalendarDay.vue'
+import CalendarAgenda  from './CalendarAgenda.vue'
+import CompromissoModal from '../CompromissoModal.vue'
+
+// ---- Estado ----
+const currentDate = ref(new Date())
+const currentView = ref<CalendarViewType>('mes')
+
+const modalOpen         = ref(false)
+const editingCompromisso = ref<Compromisso | null>(null)
+const modalDefaultDate  = ref<Date | null>(null)
+
+// ---- Composable ----
+const { getByDay, getByMonth, addCompromisso, updateCompromisso, removeCompromisso } = useAgenda()
+
+// ---- Compromissos filtrados para a view atual ----
+const viewCompromissos = computed(() => {
+  const d = currentDate.value
+  switch (currentView.value) {
+    case 'mes':
+      return getByMonth(d.getFullYear(), d.getMonth())
+    case 'semana':
+    case 'dia':
+      // As views filtram internamente por dia; passamos todos do mês para eficiência
+      return getByMonth(d.getFullYear(), d.getMonth())
+    case 'agenda':
+      // CalendarAgenda filtra os próximos 60 dias internamente
+      return getByMonth(d.getFullYear(), d.getMonth())
+        .concat(getByMonth(d.getFullYear(), d.getMonth() + 1))
+        .concat(getByMonth(d.getFullYear(), d.getMonth() + 2))
+    default:
+      return []
+  }
+})
+
+// ---- Navegação ----
+function navigatePrev() {
+  switch (currentView.value) {
+    case 'mes':    currentDate.value = addMonths(currentDate.value, -1); break
+    case 'semana': currentDate.value = addWeeks(currentDate.value, -1);  break
+    case 'dia':    currentDate.value = addDays(currentDate.value, -1);   break
+    case 'agenda': currentDate.value = addDays(currentDate.value, -7);   break
+  }
+}
+
+function navigateNext() {
+  switch (currentView.value) {
+    case 'mes':    currentDate.value = addMonths(currentDate.value, 1); break
+    case 'semana': currentDate.value = addWeeks(currentDate.value, 1);  break
+    case 'dia':    currentDate.value = addDays(currentDate.value, 1);   break
+    case 'agenda': currentDate.value = addDays(currentDate.value, 7);   break
+  }
+}
+
+function navigateToday() {
+  currentDate.value = new Date()
+}
+
+// ---- Modal ----
+function openNewModal(date?: Date) {
+  editingCompromisso.value = null
+  modalDefaultDate.value   = date ?? new Date()
+  modalOpen.value          = true
+}
+
+function openEditModal(compromisso: Compromisso) {
+  editingCompromisso.value = compromisso
+  modalDefaultDate.value   = null
+  modalOpen.value          = true
+}
+
+function closeModal() {
+  modalOpen.value = false
+}
+
+function handleSave(payload: CompromissoPayload, id?: string) {
+  if (id) {
+    updateCompromisso(id, payload)
+  } else {
+    addCompromisso(payload)
+  }
+  closeModal()
+}
+
+// ---- Slot click: navegar para o dia e abrir modal ----
+function handleSlotClick(date: Date) {
+  if (currentView.value === 'mes' || currentView.value === 'agenda') {
+    currentDate.value  = date
+    currentView.value  = 'dia'
+  } else {
+    openNewModal(date)
+  }
+}
+</script>
+
+<template>
+  <div class="calendar-view">
+    <CalendarHeader
+      :current-date="currentDate"
+      :current-view="currentView"
+      @prev="navigatePrev"
+      @next="navigateNext"
+      @today="navigateToday"
+      @change-view="v => currentView = v"
+      @new-compromisso="openNewModal()"
+    />
+
+    <div class="calendar-view__body">
+      <CalendarMonth
+        v-if="currentView === 'mes'"
+        :current-date="currentDate"
+        :compromissos="viewCompromissos"
+        @slot-click="handleSlotClick"
+        @compromisso-click="openEditModal"
+      />
+      <CalendarWeek
+        v-else-if="currentView === 'semana'"
+        :current-date="currentDate"
+        :compromissos="viewCompromissos"
+        @slot-click="openNewModal"
+        @compromisso-click="openEditModal"
+      />
+      <CalendarDay
+        v-else-if="currentView === 'dia'"
+        :current-date="currentDate"
+        :compromissos="viewCompromissos"
+        @slot-click="openNewModal"
+        @compromisso-click="openEditModal"
+      />
+      <CalendarAgenda
+        v-else-if="currentView === 'agenda'"
+        :current-date="currentDate"
+        :compromissos="viewCompromissos"
+        @slot-click="handleSlotClick"
+        @compromisso-click="openEditModal"
+      />
+    </div>
+
+    <CompromissoModal
+      :open="modalOpen"
+      :compromisso="editingCompromisso"
+      :default-date="modalDefaultDate"
+      @close="closeModal"
+      @save="handleSave"
+    />
+  </div>
+</template>
+
+<style lang="scss" scoped>
+@use 'styles/abstracts' as *;
+
+.calendar-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: $radius-lg;
+  overflow: hidden;
+
+  &__body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+</style>

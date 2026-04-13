@@ -1,0 +1,46 @@
+// Tema escuro — ativado com [data-theme="dark"] no <html>
+[data-theme='dark'] {
+  // Backgrounds
+  --color-bg:             #09090b;
+  --color-surface:        #18181b;
+  --color-surface-raised: #27272a;
+
+  // Borders
+  --color-border:         #3f3f46;
+  --color-border-subtle:  #27272a;
+
+  // Text
+  --color-text-primary:   #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-text-disabled:  #52525b;
+
+  // Accent
+  --color-accent:         #60a5fa;
+  --color-accent-hover:   #93c5fd;
+  --color-accent-subtle:  #1e3a5f;
+  --color-accent-text:    #09090b;
+
+  // Status de agendamento
+  --color-status-confirmed: #4ade80;
+  --color-status-pending:   #fbbf24;
+  --color-status-cancelled: #f87171;
+  --color-status-bg-confirmed: #052e16;
+  --color-status-bg-pending:   #1c1203;
+  --color-status-bg-cancelled: #1c0202;
+
+  // Shadows (mais pronunciadas no dark)
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.40);
+
+  // Tipos de compromisso
+  --color-tipo-feriado:              #34d399;
+  --color-tipo-feriado-bg:           #022c22;
+  --color-tipo-ponto-facultativo:    #fbbf24;
+  --color-tipo-ponto-facultativo-bg: #1c1203;
+  --color-tipo-oitiva:               #818cf8;
+  --color-tipo-oitiva-bg:            #1e1b4b;
+  --color-tipo-operacao:             #fb923c;
+  --color-tipo-operacao-bg:          #1c0a00;
+  --color-tipo-livre:                #a1a1aa;
+  --color-tipo-livre-bg:             #27272a;
+}
