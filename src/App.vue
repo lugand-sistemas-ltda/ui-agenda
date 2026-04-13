@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import AppHeader from './components/layout/AppHeader.vue'
 import CalendarView from './components/features/agenda/views/CalendarView.vue'
 </script>
 
 <template>
   <div class="app-layout">
-    <CalendarView />
+    <AppHeader />
+    <main class="app-layout__main">
+      <CalendarView />
+    </main>
   </div>
 </template>
 
@@ -15,7 +19,13 @@ import CalendarView from './components/features/agenda/views/CalendarView.vue'
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  padding: $spacing-4;
   background-color: var(--color-bg);
+
+  &__main {
+    flex: 1;
+    min-height: 0;
+    padding: $spacing-4;
+    overflow: hidden;
+  }
 }
 </style>
