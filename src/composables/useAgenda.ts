@@ -1,87 +1,36 @@
 import { ref, readonly, computed } from 'vue'
 import type { Compromisso, CompromissoPayload } from '../types/agenda'
+import type { CompromissoAPI } from '../services/agenda.service'
+import { compromissoService } from '../services/agenda.service'
 import { isSameDay, parseLocal } from '../utils/dateUtils'
 
 // =============================================================================
 // SINGLETON — estado compartilhado entre todos os componentes
 // =============================================================================
 
-const compromissos = ref<Compromisso[]>([
-  // ----- Mock: Feriado Tiradentes -----
-  {
-    id: 'mock-1',
-    titulo: 'Tiradentes',
-    descricao: 'Feriado nacional',
-    tipo: 'feriado',
-    status: 'confirmado',
-    dataInicio: '2026-04-21T00:00:00',
-    dataFim:    '2026-04-21T23:59:59',
-    responsavel: { id: 'sys', nome: 'Sistema' },
-    outrosResponsaveis: [],
-  },
-  // ----- Mock: Ponto Facultativo -----
-  {
-    id: 'mock-2',
-    titulo: 'Ponto Facultativo',
-    descricao: 'Véspera de Tiradentes',
-    tipo: 'ponto_facultativo',
-    status: 'confirmado',
-    dataInicio: '2026-04-20T00:00:00',
-    dataFim:    '2026-04-20T23:59:59',
-    responsavel: { id: 'sys', nome: 'Sistema' },
-    outrosResponsaveis: [],
-  },
-  // ----- Mock: Oitiva -----
-  {
-    id: 'mock-3',
-    titulo: 'Oitiva — Proc. 1234/2026',
-    descricao: 'Oitiva de testemunhas referente ao processo 1234/2026',
-    tipo: 'oitiva',
-    status: 'confirmado',
-    dataInicio: '2026-04-15T09:00:00',
-    dataFim:    '2026-04-15T11:00:00',
-    responsavel: { id: 'u1', nome: 'André Myszko' },
-    outrosResponsaveis: [{ id: 'u2', nome: 'Maria Silva' }],
-    local: 'Sala de Audiências 3',
-    observacoes: 'Trazer documentação completa do processo',
-  },
-  // ----- Mock: Operação -----
-  {
-    id: 'mock-4',
-    titulo: 'Operação Madrugada',
-    tipo: 'operacao',
-    status: 'pendente',
-    dataInicio: '2026-04-17T02:00:00',
-    dataFim:    '2026-04-17T06:00:00',
-    responsavel: { id: 'u1', nome: 'André Myszko' },
-    outrosResponsaveis: [],
-    local: 'Zona Norte',
-  },
-  // ----- Mock: Livre -----
-  {
-    id: 'mock-5',
-    titulo: 'Reunião de equipe',
-    tipo: 'livre',
-    status: 'confirmado',
-    dataInicio: '2026-04-13T09:00:00',
-    dataFim:    '2026-04-13T10:00:00',
-    responsavel: { id: 'u1', nome: 'André Myszko' },
-    outrosResponsaveis: [],
-    observacoes: 'Pauta: planejamento do trimestre',
-  },
-  // ----- Mock: Oitiva mesma semana -----
-  {
-    id: 'mock-6',
-    titulo: 'Oitiva — Proc. 0987/2026',
-    tipo: 'oitiva',
-    status: 'pendente',
-    dataInicio: '2026-04-14T14:00:00',
-    dataFim:    '2026-04-14T16:00:00',
-    responsavel: { id: 'u1', nome: 'André Myszko' },
-    outrosResponsaveis: [],
-    local: 'Sala Virtual',
-  },
-])
+const compromissos  = ref<Compromisso[]>([])
+const loading       = ref(false)
+const error         = ref<string | null>(null)
+
+// =============================================================================
+// MAPEAMENTO API → domínio local
+// =============================================================================
+
+function fromAPI(c: CompromissoAPI): Compromisso {
+  return {
+    id:          c.id,
+    titulo:      c.titulo,
+    descricao:   c.descricao,
+    tipo:        c.tipo as Compromisso['tipo'],
+    status:      c.status as Compromisso['status'],
+    dataInicio:  c.dataInicio,
+    dataFim:     c.dataFim,
+    local:       c.local,
+    observacoes: c.observacoes,
+    responsavel: { id: c.responsavel.id, nome: c.responsavel.nome },
+    outrosResponsaveis: c.outrosResponsaveis.map(r => ({ id: r.id, nome: r.nome })),
+  }
+}
 
 // =============================================================================
 // COMPOSABLE
@@ -89,22 +38,68 @@ const compromissos = ref<Compromisso[]>([
 
 export function useAgenda() {
 
+  // --- CARREGAMENTO ---------------------------------------------------------
+
+  async function fetchByMonth(year: number, month: number): Promise<void> {
+    loading.value = true
+    error.value   = null
+    try {
+      // API recebe mes 1-based; JS Date.getMonth() é 0-based → +1
+      const data = await compromissoService.listar({ ano: year, mes: month + 1 })
+      // Mescla com o estado: remove os do mesmo mês e reinsere os novos
+      compromissos.value = [
+        ...compromissos.value.filter(c => {
+          const d = parseLocal(c.dataInicio)
+          return !(d.getFullYear() === year && d.getMonth() === month)
+        }),
+        ...data.map(fromAPI),
+      ]
+    } catch (e) {
+      error.value = String(e)
+    } finally {
+      loading.value = false
+    }
+  }
+
   // --- CRUD -----------------------------------------------------------------
 
-  function addCompromisso(payload: CompromissoPayload): Compromisso {
-    const compromisso: Compromisso = { ...payload, id: crypto.randomUUID() }
+  async function addCompromisso(payload: CompromissoPayload): Promise<Compromisso> {
+    const created = await compromissoService.criar({
+      titulo:              payload.titulo,
+      descricao:           payload.descricao,
+      tipo:                payload.tipo,
+      status:              payload.status,
+      dataInicio:          payload.dataInicio,
+      dataFim:             payload.dataFim,
+      local:               payload.local,
+      observacoes:         payload.observacoes,
+      responsavelId:       payload.responsavel.id,
+      outrosResponsaveisIds: payload.outrosResponsaveis.map(r => r.id),
+    })
+    const compromisso = fromAPI(created)
     compromissos.value.push(compromisso)
     return compromisso
   }
 
-  function updateCompromisso(id: string, payload: Partial<CompromissoPayload>): void {
+  async function updateCompromisso(id: string, payload: Partial<CompromissoPayload>): Promise<void> {
+    const updated = await compromissoService.atualizar(id, {
+      titulo:              payload.titulo,
+      descricao:           payload.descricao,
+      tipo:                payload.tipo,
+      status:              payload.status,
+      dataInicio:          payload.dataInicio,
+      dataFim:             payload.dataFim,
+      local:               payload.local,
+      observacoes:         payload.observacoes,
+      responsavelId:       payload.responsavel?.id,
+      outrosResponsaveisIds: payload.outrosResponsaveis?.map(r => r.id),
+    })
     const idx = compromissos.value.findIndex(c => c.id === id)
-    if (idx !== -1) {
-      compromissos.value[idx] = { ...compromissos.value[idx], ...payload }
-    }
+    if (idx !== -1) compromissos.value[idx] = fromAPI(updated)
   }
 
-  function removeCompromisso(id: string): void {
+  async function removeCompromisso(id: string): Promise<void> {
+    await compromissoService.remover(id)
     compromissos.value = compromissos.value.filter(c => c.id !== id)
   }
 
@@ -112,7 +107,7 @@ export function useAgenda() {
     return compromissos.value.find(c => c.id === id)
   }
 
-  // --- FILTROS --------------------------------------------------------------
+  // --- FILTROS (locais — sobre o estado já carregado) -----------------------
 
   function getByDay(date: Date): Compromisso[] {
     return compromissos.value.filter(c =>
@@ -138,6 +133,9 @@ export function useAgenda() {
   return {
     compromissos: readonly(compromissos),
     sortedCompromissos,
+    loading:  readonly(loading),
+    error:    readonly(error),
+    fetchByMonth,
     addCompromisso,
     updateCompromisso,
     removeCompromisso,

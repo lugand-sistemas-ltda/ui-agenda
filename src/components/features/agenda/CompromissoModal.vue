@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, watch, computed } from 'vue'
+import { reactive, ref, watch, computed, onMounted } from 'vue'
 import type { Compromisso, CompromissoPayload, CompromissoTipo, CompromissoStatus } from '../../../types/agenda'
 import { TIPO_LABELS, STATUS_LABELS } from '../../../types/agenda'
 import type { SelectOption } from '../../primitives/AppSelect.vue'
@@ -10,6 +10,9 @@ import AppTextarea from '../../primitives/AppTextarea.vue'
 import AppButton from '../../primitives/AppButton.vue'
 import AppText from '../../primitives/AppText.vue'
 import { toDatetimeLocal, fromDatetimeLocal, addDays, parseLocal } from '../../../utils/dateUtils'
+import { useAgenda } from '../../../composables/useAgenda'
+import type { UsuarioAPI } from '../../../services/agenda.service'
+import { usuarioService } from '../../../services/agenda.service'
 
 const props = withDefaults(defineProps<{
   open: boolean
@@ -39,27 +42,55 @@ const statusOptions: SelectOption[] = (Object.keys(STATUS_LABELS) as Compromisso
   label: STATUS_LABELS[k],
 }))
 
+// ---- Usuários da API ----
+
+const usuarios = ref<UsuarioAPI[]>([])
+
+onMounted(async () => {
+  try {
+    usuarios.value = await usuarioService.listar()
+  } catch {
+    // silencioso — o select ficará vazio e o campo ficará inválido na validação
+  }
+})
+
+const usuarioOptions = computed<SelectOption[]>(() =>
+  usuarios.value.map(u => ({ value: u.id, label: u.nome })),
+)
+
 // ---- Estado do formulário ----
 
 function defaultForm() {
   const base = props.defaultDate ?? new Date()
   const fim  = new Date(base); fim.setHours(fim.getHours() + 1)
   return {
-    titulo:            '',
-    descricao:         '',
-    tipo:              'livre' as CompromissoTipo,
-    status:            'pendente' as CompromissoStatus,
-    dataInicio:        toDatetimeLocal(base),
-    dataFim:           toDatetimeLocal(fim),
-    responsavelNome:   '',
-    outrosNomes:       [] as string[],
-    local:             '',
-    observacoes:       '',
+    titulo:        '',
+    descricao:     '',
+    tipo:          'livre' as CompromissoTipo,
+    status:        'pendente' as CompromissoStatus,
+    dataInicio:    toDatetimeLocal(base),
+    dataFim:       toDatetimeLocal(fim),
+    responsavelId: '' as string,
+    outrosIds:     [] as string[],
+    local:         '',
+    observacoes:   '',
   }
 }
 
 const form    = reactive(defaultForm())
 const errors  = reactive<Partial<Record<keyof typeof form | 'generic', string>>>({})
+
+// ---- Alerta de feriado (RN-006) ----
+const { getByDay } = useAgenda()
+
+const feriadoAlert = computed(() => {
+  if (!form.dataInicio) return null
+  const date = parseLocal(form.dataInicio.length === 16 ? form.dataInicio + ':00' : form.dataInicio)
+  const hits = getByDay(date).filter(
+    c => c.tipo === 'feriado' || c.tipo === 'ponto_facultativo',
+  )
+  return hits.length ? hits[0] : null
+})
 
 // Preenche o form quando o modal abre
 watch(() => props.open, (open) => {
@@ -68,16 +99,16 @@ watch(() => props.open, (open) => {
   if (props.compromisso) {
     const c = props.compromisso
     Object.assign(form, {
-      titulo:          c.titulo,
-      descricao:       c.descricao ?? '',
-      tipo:            c.tipo,
-      status:          c.status,
-      dataInicio:      toDatetimeLocal(parseLocal(c.dataInicio)),
-      dataFim:         toDatetimeLocal(parseLocal(c.dataFim)),
-      responsavelNome: c.responsavel.nome,
-      outrosNomes:     c.outrosResponsaveis.map(r => r.nome),
-      local:           c.local ?? '',
-      observacoes:     c.observacoes ?? '',
+      titulo:        c.titulo,
+      descricao:     c.descricao ?? '',
+      tipo:          c.tipo,
+      status:        c.status,
+      dataInicio:    toDatetimeLocal(parseLocal(c.dataInicio)),
+      dataFim:       toDatetimeLocal(parseLocal(c.dataFim)),
+      responsavelId: c.responsavel.id,
+      outrosIds:     c.outrosResponsaveis.map(r => r.id),
+      local:         c.local ?? '',
+      observacoes:   c.observacoes ?? '',
     })
   } else {
     Object.assign(form, defaultForm())
@@ -94,11 +125,11 @@ watch(() => form.tipo, (tipo) => {
 })
 
 function addOutro() {
-  form.outrosNomes.push('')
+  form.outrosIds.push('')
 }
 
 function removeOutro(idx: number) {
-  form.outrosNomes.splice(idx, 1)
+  form.outrosIds.splice(idx, 1)
 }
 
 // ---- Validação e submit ----
@@ -123,7 +154,7 @@ function validate(): boolean {
     errors.dataFim = 'O término deve ser após o início'
     ok = false
   }
-  if (!form.responsavelNome.trim()) {
+  if (!form.responsavelId) {
     errors.responsavelNome = 'Responsável é obrigatório'
     ok = false
   }
@@ -134,6 +165,8 @@ function validate(): boolean {
 function handleSubmit() {
   if (!validate()) return
 
+  const responsavelUser = usuarios.value.find(u => u.id === form.responsavelId)
+
   const payload: CompromissoPayload = {
     titulo:            form.titulo.trim(),
     descricao:         form.descricao.trim() || undefined,
@@ -141,10 +174,13 @@ function handleSubmit() {
     status:            form.status,
     dataInicio:        fromDatetimeLocal(form.dataInicio),
     dataFim:           fromDatetimeLocal(form.dataFim),
-    responsavel:       { id: crypto.randomUUID(), nome: form.responsavelNome.trim() },
-    outrosResponsaveis: form.outrosNomes
-      .filter(n => n.trim())
-      .map(n => ({ id: crypto.randomUUID(), nome: n.trim() })),
+    responsavel:       { id: form.responsavelId, nome: responsavelUser?.nome ?? '' },
+    outrosResponsaveis: form.outrosIds
+      .filter(id => id)
+      .map(id => {
+        const u = usuarios.value.find(u => u.id === id)
+        return { id, nome: u?.nome ?? '' }
+      }),
     local:       form.local.trim() || undefined,
     observacoes: form.observacoes.trim() || undefined,
   }
@@ -181,6 +217,11 @@ function handleSubmit() {
           :error="errors.titulo"
         />
 
+        <!-- Alerta de feriado (RN-006) -->
+        <div v-if="feriadoAlert" class="comp-modal__alert" role="alert">
+          ⚠️ Esta data possui um <strong>{{ feriadoAlert.tipo === 'feriado' ? 'feriado' : 'ponto facultativo' }}</strong> registrado: {{ feriadoAlert.titulo }}
+        </div>
+
         <!-- Datas -->
         <div class="comp-modal__row">
           <AppInput
@@ -208,11 +249,12 @@ function handleSubmit() {
         />
 
         <!-- Responsável -->
-        <AppInput
+        <AppSelect
           id="responsavel"
-          v-model="form.responsavelNome"
+          v-model="form.responsavelId"
+          :options="usuarioOptions"
           label="Responsável"
-          placeholder="Nome do responsável"
+          placeholder="Selecione o responsável"
           :error="errors.responsavelNome"
         />
 
@@ -225,13 +267,14 @@ function handleSubmit() {
             </AppButton>
           </div>
           <div
-            v-for="(_, idx) in form.outrosNomes"
+            v-for="(_, idx) in form.outrosIds"
             :key="idx"
             class="comp-modal__outro-row"
           >
-            <AppInput
+            <AppSelect
               :id="`outro-${idx}`"
-              v-model="form.outrosNomes[idx]"
+              v-model="form.outrosIds[idx]"
+              :options="usuarioOptions"
               :placeholder="`Responsável ${idx + 1}`"
             />
             <AppButton variant="icon" size="sm" type="button" aria-label="Remover" @click="removeOutro(idx)">
@@ -323,6 +366,15 @@ function handleSubmit() {
     @include flex(row, flex-start, flex-start, $spacing-2);
 
     .app-input { flex: 1; }
+  }
+
+  &__alert {
+    padding: $spacing-3 $spacing-4;
+    border-radius: $radius-md;
+    background-color: var(--color-status-bg-pending);
+    color: var(--color-text-primary);
+    font-size: $font-size-sm;
+    border: 1px solid var(--color-status-pending);
   }
 
   &__footer {

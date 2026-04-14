@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import type { Compromisso, CalendarViewType, CompromissoPayload } from '../../../../types/agenda'
 import { addDays, addWeeks, addMonths, addYears } from '../../../../utils/dateUtils'
 import { useAgenda } from '../../../../composables/useAgenda'
@@ -20,7 +20,30 @@ const editingCompromisso = ref<Compromisso | null>(null)
 const modalDefaultDate  = ref<Date | null>(null)
 
 // ---- Composable ----
-const { getByMonth, addCompromisso, updateCompromisso } = useAgenda()
+const { getByMonth, addCompromisso, updateCompromisso, fetchByMonth } = useAgenda()
+
+// ---- Carregamento de dados ----
+
+async function loadForCurrentView(): Promise<void> {
+  const d    = currentDate.value
+  const year = d.getFullYear()
+  const month = d.getMonth()
+
+  if (currentView.value === 'ano') {
+    await Promise.all(Array.from({ length: 12 }, (_, m) => fetchByMonth(year, m)))
+  } else if (currentView.value === 'agenda') {
+    await Promise.all([
+      fetchByMonth(year, month),
+      fetchByMonth(year, month + 1),
+      fetchByMonth(year, month + 2),
+    ])
+  } else {
+    await fetchByMonth(year, month)
+  }
+}
+
+onMounted(loadForCurrentView)
+watch([currentDate, currentView], loadForCurrentView)
 
 // ---- Compromissos filtrados para a view atual ----
 const viewCompromissos = computed(() => {
@@ -90,11 +113,11 @@ function closeModal() {
   modalOpen.value = false
 }
 
-function handleSave(payload: CompromissoPayload, id?: string) {
+async function handleSave(payload: CompromissoPayload, id?: string) {
   if (id) {
-    updateCompromisso(id, payload)
+    await updateCompromisso(id, payload)
   } else {
-    addCompromisso(payload)
+    await addCompromisso(payload)
   }
   closeModal()
 }
