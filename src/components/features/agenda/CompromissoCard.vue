@@ -22,7 +22,7 @@ function tipoCssKey(tipo: CompromissoTipo): string {
   <button
     type="button"
     :class="['compromisso-card', `compromisso-card--${tipoCssKey(compromisso.tipo)}`, { 'compromisso-card--compact': compact }]"
-    @click="$emit('click', compromisso)"
+    @click.stop="$emit('click', compromisso)"
   >
     <!-- Compact (usado no mês e semana) -->
     <template v-if="compact">

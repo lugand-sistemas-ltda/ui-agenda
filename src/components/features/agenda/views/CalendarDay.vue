@@ -63,7 +63,7 @@ function slotDate(hour: number): Date {
             v-for="c in slotCompromissos(parseInt(slot))"
             :key="c.id"
             :compromisso="c"
-            @click.stop="$emit('compromissoClick', c)"
+            @click="$emit('compromissoClick', c)"
           />
         </div>
       </div>

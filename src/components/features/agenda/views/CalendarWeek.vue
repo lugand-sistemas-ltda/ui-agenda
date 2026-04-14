@@ -81,7 +81,7 @@ function slotDate(day: Date, hour: number): Date {
             :key="c.id"
             :compromisso="c"
             compact
-            @click.stop="$emit('compromissoClick', c)"
+            @click="$emit('compromissoClick', c)"
           />
         </div>
       </div>
