@@ -26,8 +26,9 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
-  close: []
-  save:  [payload: CompromissoPayload, id?: string]
+  close:  []
+  save:   [payload: CompromissoPayload, id?: string]
+  delete: [id: string]
 }>()
 
 // ---- Opções de selects ----
@@ -311,10 +312,20 @@ function handleSubmit() {
 
       <!-- Rodapé -->
       <div class="comp-modal__footer">
-        <AppButton variant="ghost" type="button" @click="$emit('close')">Cancelar</AppButton>
-        <AppButton variant="primary" type="submit">
-          {{ compromisso ? 'Salvar alterações' : 'Criar compromisso' }}
+        <AppButton
+          v-if="compromisso"
+          variant="danger"
+          type="button"
+          @click="$emit('delete', compromisso.id)"
+        >
+          Excluir
         </AppButton>
+        <div class="comp-modal__footer-actions">
+          <AppButton variant="ghost" type="button" @click="$emit('close')">Cancelar</AppButton>
+          <AppButton variant="primary" type="submit">
+            {{ compromisso ? 'Salvar alterações' : 'Criar compromisso' }}
+          </AppButton>
+        </div>
       </div>
     </form>
   </AppModal>
@@ -378,10 +389,15 @@ function handleSubmit() {
   }
 
   &__footer {
-    @include flex(row, center, flex-end, $spacing-3);
+    @include flex(row, center, space-between, $spacing-3);
     padding: $spacing-4 $spacing-6;
     border-top: 1px solid var(--color-border);
     flex-shrink: 0;
+  }
+
+  &__footer-actions {
+    @include flex(row, center, flex-end, $spacing-3);
+    margin-left: auto;
   }
 }
 </style>

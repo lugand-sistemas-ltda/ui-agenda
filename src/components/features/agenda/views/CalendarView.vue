@@ -20,7 +20,7 @@ const editingCompromisso = ref<Compromisso | null>(null)
 const modalDefaultDate  = ref<Date | null>(null)
 
 // ---- Composable ----
-const { getByMonth, addCompromisso, updateCompromisso, fetchByMonth } = useAgenda()
+const { getByMonth, addCompromisso, updateCompromisso, removeCompromisso, fetchByMonth, loading, error } = useAgenda()
 
 // ---- Carregamento de dados ----
 
@@ -122,6 +122,11 @@ async function handleSave(payload: CompromissoPayload, id?: string) {
   closeModal()
 }
 
+async function handleDelete(id: string) {
+  await removeCompromisso(id)
+  closeModal()
+}
+
 // ---- Slot click: navegar para o dia e abrir modal ----
 function handleSlotClick(date: Date) {
   if (currentView.value === 'mes' || currentView.value === 'agenda' || currentView.value === 'ano') {
@@ -135,6 +140,11 @@ function handleSlotClick(date: Date) {
 
 <template>
   <div class="calendar-view">
+    <!-- Banner de erro -->
+    <div v-if="error" class="calendar-view__error" role="alert">
+      ⚠️ Erro ao carregar dados: {{ error }}
+    </div>
+
     <CalendarHeader
       :current-date="currentDate"
       :current-view="currentView"
@@ -146,6 +156,10 @@ function handleSlotClick(date: Date) {
     />
 
     <div class="calendar-view__body">
+      <!-- Overlay de loading -->
+      <div v-if="loading" class="calendar-view__loading" aria-live="polite" aria-label="Carregando">
+        <span class="calendar-view__spinner" />
+      </div>
       <CalendarMonth
         v-if="currentView === 'mes'"
         :current-date="currentDate"
@@ -188,6 +202,7 @@ function handleSlotClick(date: Date) {
       :default-date="modalDefaultDate"
       @close="closeModal"
       @save="handleSave"
+      @delete="handleDelete"
     />
   </div>
 </template>
@@ -211,6 +226,40 @@ function handleSlotClick(date: Date) {
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
+    position: relative;
   }
+
+  &__loading {
+    position: absolute;
+    inset: 0;
+    z-index: $z-overlay;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: color-mix(in srgb, var(--color-bg) 70%, transparent);
+    backdrop-filter: blur(2px);
+  }
+
+  &__spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  &__error {
+    padding: $spacing-2 $spacing-4;
+    background-color: var(--color-status-bg-cancelled);
+    border-bottom: 1px solid var(--color-status-cancelled);
+    color: var(--color-text-primary);
+    font-size: $font-size-sm;
+    flex-shrink: 0;
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>
