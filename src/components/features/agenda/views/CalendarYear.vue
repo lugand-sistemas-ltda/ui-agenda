@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Compromisso, CompromissoTipo } from '../../../../types/agenda'
+import type { Compromisso, CompromissoTipo, ItemRenderizacao } from '../../../../types/agenda'
 import {
   MONTHS_BR,
   generateMonthGrid,
@@ -29,13 +29,14 @@ const months = computed(() =>
   })),
 )
 
-// Mapa rápido: "YYYY-MM-DD" → tipo do primeiro compromisso do dia
-const dayTypeMap = computed(() => {
-  const map = new Map<string, CompromissoTipo>()
+// Mapa rápido: "YYYY-MM-DD" → { renderizacao, tipo } do primeiro item marcador do dia
+interface DayMark { renderizacao: ItemRenderizacao; tipo: CompromissoTipo }
+const dayMarkMap = computed(() => {
+  const map = new Map<string, DayMark>()
   for (const c of props.compromissos) {
     const d   = parseLocal(c.dataInicio)
     const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-    if (!map.has(key)) map.set(key, c.tipo)
+    if (!map.has(key)) map.set(key, { renderizacao: c.renderizacao, tipo: c.tipo })
   }
   return map
 })
@@ -74,14 +75,19 @@ function tipoCssKey(tipo: CompromissoTipo): string {
               'cal-year__day',
               { 'cal-year__day--other-month': !isCurrentMonth(day, new Date(currentDate.getFullYear(), month)) },
               { 'cal-year__day--today': isToday(day) },
+              // ADR-005 IA-005: fundo_dia colore o fundo do dia como quadrado
+              dayMarkMap.get(dayKey(day))?.renderizacao === 'fundo_dia'
+                ? `cal-year__day--fundo-${tipoCssKey(dayMarkMap.get(dayKey(day))!.tipo)}`
+                : '',
             ]"
             :aria-label="`${day.getDate()}/${day.getMonth()+1}/${day.getFullYear()}`"
             @click="$emit('dayClick', day)"
           >
             <span class="cal-year__day-num">{{ day.getDate() }}</span>
+            <!-- evento: ponto pequeno; fundo_dia: tratado via classe CSS no botão -->
             <span
-              v-if="dayTypeMap.get(dayKey(day))"
-              :class="['cal-year__dot', `cal-year__dot--${tipoCssKey(dayTypeMap.get(dayKey(day))!)}`]"
+              v-if="dayMarkMap.get(dayKey(day))?.renderizacao === 'evento'"
+              :class="['cal-year__dot', `cal-year__dot--${tipoCssKey(dayMarkMap.get(dayKey(day))!.tipo)}`]"
             />
           </button>
         </div>
@@ -168,6 +174,16 @@ function tipoCssKey(tipo: CompromissoTipo): string {
       color: var(--color-accent-text);
       border-radius: $radius-full;
     }
+
+    // ADR-005 IA-005: fundo_dia colore o fundo do dia como quadrado colorido
+    @each $tipo in feriado, ponto-facultativo, recesso {
+      &--fundo-#{$tipo} {
+        background-color: var(--color-tipo-#{$tipo}-bg);
+        border-radius: $radius-sm;
+
+        .cal-year__day-num { color: var(--color-tipo-#{$tipo}); font-weight: $font-weight-semibold; }
+      }
+    }
   }
 
   &__day-num {
@@ -188,7 +204,7 @@ function tipoCssKey(tipo: CompromissoTipo): string {
     flex-shrink: 0;
 
     // Cor por tipo de compromisso
-    @each $tipo in feriado, ponto-facultativo, oitiva, operacao, livre {
+    @each $tipo in feriado, ponto-facultativo, recesso, oitiva, operacao, reuniao, periodo, livre {
       &--#{$tipo} { background-color: var(--color-tipo-#{$tipo}); }
     }
   }

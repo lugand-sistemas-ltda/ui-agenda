@@ -50,7 +50,7 @@ function tipoCssKey(tipo: CompromissoTipo): string {
       <p v-if="compromisso.local" class="compromisso-card__meta">
         📍 {{ compromisso.local }}
       </p>
-      <p class="compromisso-card__meta">
+      <p v-if="compromisso.responsavel" class="compromisso-card__meta">
         {{ compromisso.responsavel.nome }}
         <template v-if="compromisso.outrosResponsaveis.length">
           + {{ compromisso.outrosResponsaveis.length }} responsável(is)
@@ -133,7 +133,7 @@ function tipoCssKey(tipo: CompromissoTipo): string {
   }
 
   // ---- Variantes por tipo (compact: bg + cor; full: border-left + bg suave) ----
-  @each $tipo in feriado, ponto-facultativo, oitiva, operacao, livre {
+  @each $tipo in feriado, ponto-facultativo, recesso, oitiva, operacao, reuniao, periodo, livre {
     &--#{$tipo} {
       background-color: var(--color-tipo-#{$tipo}-bg);
       color:            var(--color-tipo-#{$tipo});

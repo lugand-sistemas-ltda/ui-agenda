@@ -18,17 +18,21 @@ const error         = ref<string | null>(null)
 
 function fromAPI(c: CompromissoAPI): Compromisso {
   return {
-    id:          c.id,
-    titulo:      c.titulo,
-    descricao:   c.descricao,
-    tipo:        c.tipo as Compromisso['tipo'],
-    status:      c.status as Compromisso['status'],
-    dataInicio:  c.dataInicio,
-    dataFim:     c.dataFim,
-    local:       c.local,
-    observacoes: c.observacoes,
-    responsavel: { id: c.responsavel.id, nome: c.responsavel.nome },
+    id:             c.id,
+    titulo:         c.titulo,
+    descricao:      c.descricao,
+    tipo:           c.tipo as Compromisso['tipo'],
+    status:         c.status as Compromisso['status'],
+    renderizacao:   (c.renderizacao ?? 'evento') as Compromisso['renderizacao'],
+    exigePresenca:  c.exigePresenca ?? false,
+    dataInicio:     c.dataInicio,
+    dataFim:        c.dataFim,
+    local:          c.local,
+    observacoes:    c.observacoes,
+    responsavel:    c.responsavel ? { id: c.responsavel.id, nome: c.responsavel.nome } : null,
     outrosResponsaveis: c.outrosResponsaveis.map(r => ({ id: r.id, nome: r.nome })),
+    agendaId:       c.agendaId,
+    itemPaiId:      c.itemPaiId,
   }
 }
 
@@ -73,7 +77,7 @@ export function useAgenda() {
       dataFim:             payload.dataFim,
       local:               payload.local,
       observacoes:         payload.observacoes,
-      responsavelId:       payload.responsavel.id,
+      responsavelId:       payload.responsavel?.id,
       outrosResponsaveisIds: payload.outrosResponsaveis.map(r => r.id),
     })
     const compromisso = fromAPI(created)

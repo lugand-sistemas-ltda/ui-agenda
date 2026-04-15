@@ -23,6 +23,24 @@ const grid = computed(() =>
 function dayCompromissos(date: Date): Compromisso[] {
   return props.compromissos.filter(c => isSameDay(parseLocal(c.dataInicio), date))
 }
+
+// ADR-005 IA-005 / ADR-002 PA-011: fundo_dia preenche o fundo da célula
+function dayFundoDia(date: Date): Compromisso | undefined {
+  return props.compromissos.find(
+    c => c.renderizacao === 'fundo_dia' && isSameDay(parseLocal(c.dataInicio), date),
+  )
+}
+
+// Itens evento renderizados como cards sobre o fundo
+function dayEventos(date: Date): Compromisso[] {
+  return props.compromissos.filter(
+    c => c.renderizacao !== 'fundo_dia' && isSameDay(parseLocal(c.dataInicio), date),
+  )
+}
+
+function tipoCssKey(tipo: string): string {
+  return tipo.replace(/_/g, '-')
+}
 </script>
 
 <template>
@@ -41,6 +59,7 @@ function dayCompromissos(date: Date): Compromisso[] {
           'cal-month__cell',
           { 'cal-month__cell--other-month': !isCurrentMonth(day, currentDate) },
           { 'cal-month__cell--today':       isToday(day) },
+          dayFundoDia(day) ? `cal-month__cell--fundo-${tipoCssKey(dayFundoDia(day)!.tipo)}` : '',
         ]"
         :aria-label="`${day.getDate()}/${day.getMonth() + 1}/${day.getFullYear()}`"
         @click="$emit('slotClick', day)"
@@ -49,7 +68,7 @@ function dayCompromissos(date: Date): Compromisso[] {
 
         <div class="cal-month__events">
           <CompromissoCard
-            v-for="c in dayCompromissos(day).slice(0, MAX_VISIBLE)"
+            v-for="c in dayEventos(day).slice(0, MAX_VISIBLE)"
             :key="c.id"
             :compromisso="c"
             compact
@@ -151,6 +170,15 @@ function dayCompromissos(date: Date): Compromisso[] {
     font-size: $font-size-xs;
     color: var(--color-text-secondary);
     padding: 0 $spacing-1;
+  }
+
+  // ADR-005 IA-005 / ADR-002 PA-011: fundo_dia preenche o fundo da célula
+  @each $tipo in feriado, ponto-facultativo, recesso {
+    &--fundo-#{$tipo} {
+      background-color: var(--color-tipo-#{$tipo}-bg);
+      // Feriados têm fundo suave; o dia continua clicável
+      &:hover { filter: brightness(0.96); }
+    }
   }
 }
 </style>

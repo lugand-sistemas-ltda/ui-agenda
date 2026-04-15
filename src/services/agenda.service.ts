@@ -23,12 +23,16 @@ export interface CompromissoAPI {
   descricao?: string
   tipo: string
   status: string
+  renderizacao: string
+  exigePresenca: boolean
   dataInicio: string   // "YYYY-MM-DDTHH:MM:SS" — ISO sem timezone
   dataFim: string
   local?: string
   observacoes?: string
-  responsavel: UsuarioAPI
+  responsavel: UsuarioAPI | null   // null para itens fundo_dia (feriados, etc.)
   outrosResponsaveis: UsuarioAPI[]
+  agendaId?: string
+  itemPaiId?: string
   criadoEm: string
   atualizadoEm: string
 }
@@ -38,12 +42,16 @@ export interface CompromissoPayloadAPI {
   descricao?: string
   tipo: string
   status?: string
+  renderizacao?: string
+  exigePresenca?: boolean
   dataInicio: string
   dataFim: string
   local?: string
   observacoes?: string
-  responsavelId: string
+  responsavelId?: string   // opcional para itens fundo_dia
   outrosResponsaveisIds?: string[]
+  agendaId?: string
+  itemPaiId?: string
 }
 
 // =============================================================================

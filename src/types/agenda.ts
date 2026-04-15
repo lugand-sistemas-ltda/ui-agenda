@@ -1,11 +1,20 @@
 // =============================================================================
-// TIPOS DE COMPROMISSO
+// TIPOS DE ITEM DE AGENDA
 // =============================================================================
+
+/** Driver visual do item no calendário (ADR-005 IA-002, ADR-002 PA-011).
+ *  Use este campo — não 'tipo' — para decidir como renderizar no front-end. */
+export type ItemRenderizacao = 'evento' | 'fundo_dia' | 'periodo'
+
+/** Tipo semântico do item (ADR-005 IA-001). */
 export type CompromissoTipo =
   | 'feriado'
   | 'ponto_facultativo'
+  | 'recesso'
   | 'oitiva'
   | 'operacao'
+  | 'reuniao'
+  | 'periodo'
   | 'livre'
 
 export type CompromissoStatus = 'confirmado' | 'pendente' | 'cancelado'
@@ -26,6 +35,10 @@ export interface Compromisso {
   descricao?: string
   tipo: CompromissoTipo
   status: CompromissoStatus
+  /** Driver de renderização visual (ADR-005 IA-002). Use isto, não 'tipo'. */
+  renderizacao: ItemRenderizacao
+  /** Presença física obrigatória: participa de verificação de conflito CONFLITO-B. */
+  exigePresenca: boolean
   /**
    * Data/hora de início no formato local sem timezone: "YYYY-MM-DDTHH:MM:SS"
    * Exibir ao usuário como "DD/MM/AAAA HH:MM:SS" (padrão brasileiro).
@@ -35,10 +48,13 @@ export interface Compromisso {
    * Data/hora de fim no formato local sem timezone: "YYYY-MM-DDTHH:MM:SS"
    */
   dataFim: string
-  responsavel: Responsavel
+  /** Null para itens fundo_dia (feriados, etc.). */
+  responsavel: Responsavel | null
   outrosResponsaveis: Responsavel[]
   local?: string
   observacoes?: string
+  agendaId?: string
+  itemPaiId?: string
 }
 
 export type CompromissoPayload = Omit<Compromisso, 'id'>
@@ -49,8 +65,11 @@ export type CompromissoPayload = Omit<Compromisso, 'id'>
 export const TIPO_LABELS: Record<CompromissoTipo, string> = {
   feriado:           'Feriado',
   ponto_facultativo: 'Ponto Facultativo',
+  recesso:           'Recesso',
   oitiva:            'Oitiva',
   operacao:          'Operação',
+  reuniao:           'Reunião',
+  periodo:           'Período',
   livre:             'Livre',
 }
 
@@ -67,3 +86,4 @@ export const VIEW_LABELS: Record<CalendarViewType, string> = {
   agenda:  'Agenda',
   ano:     'Ano',
 }
+

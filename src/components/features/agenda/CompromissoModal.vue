@@ -88,7 +88,7 @@ const feriadoAlert = computed(() => {
   if (!form.dataInicio) return null
   const date = parseLocal(form.dataInicio.length === 16 ? form.dataInicio + ':00' : form.dataInicio)
   const hits = getByDay(date).filter(
-    c => c.tipo === 'feriado' || c.tipo === 'ponto_facultativo',
+    c => c.renderizacao === 'fundo_dia',
   )
   return hits.length ? hits[0] : null
 })
@@ -106,7 +106,7 @@ watch(() => props.open, (open) => {
       status:        c.status,
       dataInicio:    toDatetimeLocal(parseLocal(c.dataInicio)),
       dataFim:       toDatetimeLocal(parseLocal(c.dataFim)),
-      responsavelId: c.responsavel.id,
+      responsavelId: c.responsavel?.id ?? '',
       outrosIds:     c.outrosResponsaveis.map(r => r.id),
       local:         c.local ?? '',
       observacoes:   c.observacoes ?? '',
