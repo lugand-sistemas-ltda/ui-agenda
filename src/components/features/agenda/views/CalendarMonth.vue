@@ -146,6 +146,14 @@ function tipoCssKey(tipo: string): string {
       align-items: center;
       justify-content: center;
     }
+
+    // ADR-005 IA-005 / ADR-002 PA-011: fundo_dia preenche o fundo da célula
+    @each $tipo in feriado, ponto-facultativo, recesso {
+      &--fundo-#{$tipo} {
+        background-color: var(--color-tipo-#{$tipo}-bg);
+        &:hover { filter: brightness(0.96); }
+      }
+    }
   }
 
   &__day-number {
@@ -170,15 +178,6 @@ function tipoCssKey(tipo: string): string {
     font-size: $font-size-xs;
     color: var(--color-text-secondary);
     padding: 0 $spacing-1;
-  }
-
-  // ADR-005 IA-005 / ADR-002 PA-011: fundo_dia preenche o fundo da célula
-  @each $tipo in feriado, ponto-facultativo, recesso {
-    &--fundo-#{$tipo} {
-      background-color: var(--color-tipo-#{$tipo}-bg);
-      // Feriados têm fundo suave; o dia continua clicável
-      &:hover { filter: brightness(0.96); }
-    }
   }
 }
 </style>

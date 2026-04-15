@@ -118,4 +118,20 @@ export const compromissoService = {
 
   remover: (id: string): Promise<void> =>
     request(`/api/compromissos/${id}`, { method: 'DELETE' }),
+
+  /** Verifica conflito de responsável com exige_presenca=true (ADR-005 CONFLITO-B / RN-008) */
+  verificarConflito: (params: {
+    responsavelId: string
+    inicio: string
+    fim: string
+    excluirId?: string
+  }): Promise<CompromissoAPI[]> => {
+    const qs = new URLSearchParams({
+      responsavelId: params.responsavelId,
+      inicio:        params.inicio,
+      fim:           params.fim,
+      ...(params.excluirId ? { excluirId: params.excluirId } : {}),
+    }).toString()
+    return request(`/api/compromissos/conflito?${qs}`)
+  },
 }

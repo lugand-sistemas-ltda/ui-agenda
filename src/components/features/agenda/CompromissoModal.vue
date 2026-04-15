@@ -12,7 +12,7 @@ import AppText from '../../primitives/AppText.vue'
 import { toDatetimeLocal, fromDatetimeLocal, addDays, parseLocal } from '../../../utils/dateUtils'
 import { useAgenda } from '../../../composables/useAgenda'
 import type { UsuarioAPI } from '../../../services/agenda.service'
-import { usuarioService } from '../../../services/agenda.service'
+import { usuarioService, compromissoService } from '../../../services/agenda.service'
 
 const props = withDefaults(defineProps<{
   open: boolean
@@ -81,6 +81,9 @@ function defaultForm() {
 const form    = reactive(defaultForm())
 const errors  = reactive<Partial<Record<keyof typeof form | 'generic', string>>>({})
 
+// ---- Alerta de conflito CONFLITO-B (RN-008) ----
+const conflictAlert = ref<string | null>(null)
+
 // ---- Alerta de feriado (RN-006) ----
 const { getByDay } = useAgenda()
 
@@ -97,6 +100,7 @@ const feriadoAlert = computed(() => {
 watch(() => props.open, (open) => {
   if (!open) return
   Object.assign(errors, {})
+  conflictAlert.value = null
   if (props.compromisso) {
     const c = props.compromisso
     Object.assign(form, {
@@ -163,16 +167,36 @@ function validate(): boolean {
   return ok
 }
 
-function handleSubmit() {
+async function handleSubmit() {
   if (!validate()) return
 
   const responsavelUser = usuarios.value.find(u => u.id === form.responsavelId)
+
+  // CONFLITO-B (ADR-005 / RN-008): verificar sobreposição para o responsável antes de salvar
+  conflictAlert.value = null
+  if (form.responsavelId && form.dataInicio && form.dataFim) {
+    try {
+      const conflitos = await compromissoService.verificarConflito({
+        responsavelId: form.responsavelId,
+        inicio:        fromDatetimeLocal(form.dataInicio),
+        fim:           fromDatetimeLocal(form.dataFim),
+        excluirId:     props.compromisso?.id,
+      })
+      if (conflitos.length) {
+        conflictAlert.value = `⚠️ Conflito de agenda: ${responsavelUser?.nome ?? 'responsável'} já possui "${conflitos[0].titulo}" neste horário.`
+      }
+    } catch {
+      // silencioso — não bloqueia o salvamento se o endpoint falhar
+    }
+  }
 
   const payload: CompromissoPayload = {
     titulo:            form.titulo.trim(),
     descricao:         form.descricao.trim() || undefined,
     tipo:              form.tipo,
     status:            form.status,
+    renderizacao:      'evento',
+    exigePresenca:     false,
     dataInicio:        fromDatetimeLocal(form.dataInicio),
     dataFim:           fromDatetimeLocal(form.dataFim),
     responsavel:       { id: form.responsavelId, nome: responsavelUser?.nome ?? '' },
@@ -221,6 +245,11 @@ function handleSubmit() {
         <!-- Alerta de feriado (RN-006) -->
         <div v-if="feriadoAlert" class="comp-modal__alert" role="alert">
           ⚠️ Esta data possui um <strong>{{ feriadoAlert.tipo === 'feriado' ? 'feriado' : 'ponto facultativo' }}</strong> registrado: {{ feriadoAlert.titulo }}
+        </div>
+
+        <!-- Alerta de conflito CONFLITO-B (RN-008) — não bloqueante -->
+        <div v-if="conflictAlert" class="comp-modal__alert comp-modal__alert--conflict" role="alert">
+          {{ conflictAlert }}
         </div>
 
         <!-- Datas -->
@@ -386,6 +415,11 @@ function handleSubmit() {
     color: var(--color-text-primary);
     font-size: $font-size-sm;
     border: 1px solid var(--color-status-pending);
+
+    &--conflict {
+      background-color: var(--color-status-bg-cancelled);
+      border-color: var(--color-status-cancelled);
+    }
   }
 
   &__footer {

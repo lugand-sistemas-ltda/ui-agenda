@@ -32,7 +32,7 @@ const timeSlots = computed(() => getTimeSlots(START_HOUR, END_HOUR))
 function slotCompromissos(day: Date, hour: number): Compromisso[] {
   return props.compromissos.filter(c => {
     const d = parseLocal(c.dataInicio)
-    return isSameDay(d, day) && getHourFromLocal(c.dataInicio) === hour
+    return isSameDay(d, day) && getHourFromLocal(c.dataInicio) === hour && c.renderizacao !== 'fundo_dia'
   })
 }
 
@@ -40,6 +40,17 @@ function slotDate(day: Date, hour: number): Date {
   const d = new Date(day)
   d.setHours(hour, 0, 0, 0)
   return d
+}
+
+// ADR-005 IA-005 / ADR-002 PA-011: retorna o fundo_dia do dia (feriado, recesso…)
+function dayFundoDia(day: Date): Compromisso | undefined {
+  return props.compromissos.find(
+    c => c.renderizacao === 'fundo_dia' && isSameDay(parseLocal(c.dataInicio), day),
+  )
+}
+
+function tipoCssKey(tipo: string): string {
+  return tipo.replace(/_/g, '-')
 }
 </script>
 
@@ -53,6 +64,12 @@ function slotDate(day: Date, hour: number): Date {
         :key="day.toISOString()"
         :class="['cal-week__day-header', { 'cal-week__day-header--today': isToday(day) }]"
       >
+        <!-- ADR-005 IA-005: banda colorida quando o dia é fundo_dia (feriado, recesso…) -->
+        <span
+          v-if="dayFundoDia(day)"
+          :class="`cal-week__fundo-band cal-week__fundo-band--${tipoCssKey(dayFundoDia(day)!.tipo)}`"
+          :title="dayFundoDia(day)!.titulo"
+        />
         <span class="cal-week__day-name">{{ DAYS_SHORT_BR[day.getDay()] }}</span>
         <span :class="['cal-week__day-num', { 'cal-week__day-num--today': isToday(day) }]">
           {{ day.getDate() }}
@@ -116,9 +133,25 @@ $cols: 7;
     padding: $spacing-2 $spacing-1;
     border-left: 1px solid var(--color-border-subtle);
     text-align: center;
+    position: relative;
+    overflow: hidden;
 
     &--today {
       background-color: var(--color-accent-subtle);
+    }
+  }
+
+  // ADR-005 IA-005 / ADR-002 PA-011: banda colorida no topo do header do dia
+  &__fundo-band {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    border-radius: 0;
+
+    @each $tipo in feriado, ponto-facultativo, recesso {
+      &--#{$tipo} { background-color: var(--color-tipo-#{$tipo}); }
     }
   }
 

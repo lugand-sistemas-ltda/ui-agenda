@@ -29,7 +29,18 @@ const dayCompromissos = computed(() =>
 )
 
 function slotCompromissos(hour: number): Compromisso[] {
-  return dayCompromissos.value.filter(c => getHourFromLocal(c.dataInicio) === hour)
+  return dayCompromissos.value.filter(
+    c => c.renderizacao !== 'fundo_dia' && getHourFromLocal(c.dataInicio) === hour,
+  )
+}
+
+// ADR-005 IA-005 / ADR-002 PA-011: fundo_dia do dia atual
+const fundoDia = computed(() =>
+  dayCompromissos.value.find(c => c.renderizacao === 'fundo_dia'),
+)
+
+function tipoCssKey(tipo: string): string {
+  return tipo.replace(/_/g, '-')
 }
 
 function slotDate(hour: number): Date {
@@ -41,6 +52,14 @@ function slotDate(hour: number): Date {
 
 <template>
   <div class="cal-day">
+    <!-- ADR-005 IA-005: banda colorida no topo quando o dia é fundo_dia -->
+    <div
+      v-if="fundoDia"
+      :class="`cal-day__fundo-band cal-day__fundo-band--${tipoCssKey(fundoDia.tipo)}`"
+    >
+      <span class="cal-day__fundo-label">{{ fundoDia.titulo }}</span>
+    </div>
+
     <!-- Aviso de compromissos fora do intervalo exibido -->
     <div v-if="dayCompromissos.filter(c => getHourFromLocal(c.dataInicio) < START_HOUR || getHourFromLocal(c.dataInicio) > END_HOUR).length" class="cal-day__overflow-notice">
       {{
@@ -81,6 +100,29 @@ $time-gutter: 52px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+
+  // ADR-005 IA-005 / ADR-002 PA-011: banda colorida no topo do dia
+  &__fundo-band {
+    display: flex;
+    align-items: center;
+    padding: $spacing-2 $spacing-4;
+    gap: $spacing-2;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+
+    @each $tipo in feriado, ponto-facultativo, recesso {
+      &--#{$tipo} {
+        background-color: var(--color-tipo-#{$tipo}-bg);
+        border-left: 4px solid var(--color-tipo-#{$tipo});
+      }
+    }
+  }
+
+  &__fundo-label {
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: var(--color-text-primary);
+  }
 
   &__overflow-notice {
     padding: $spacing-2 $spacing-4;

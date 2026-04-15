@@ -24,7 +24,12 @@ const emit = defineEmits<{
 interface DayGroup {
   date: Date
   label: string
-  items: Compromisso[]
+  fundoDia: Compromisso | undefined
+  eventos: Compromisso[]
+}
+
+function tipoCssKey(tipo: string): string {
+  return tipo.replace(/_/g, '-')
 }
 
 const groups = computed<DayGroup[]>(() => {
@@ -48,9 +53,15 @@ const groups = computed<DayGroup[]>(() => {
     const key  = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
     if (!map.has(key)) {
       const label = `${DAYS_FULL_BR[d.getDay()]}, ${d.getDate()} ${MONTHS_SHORT_BR[d.getMonth()]} ${d.getFullYear()}`
-      map.set(key, { date: d, label, items: [] })
+      map.set(key, { date: d, label, fundoDia: undefined, eventos: [] })
     }
-    map.get(key)!.items.push(c)
+    const group = map.get(key)!
+    if (c.renderizacao === 'fundo_dia') {
+      // apenas um fundo_dia por dia — guarda o primeiro
+      if (!group.fundoDia) group.fundoDia = c
+    } else {
+      group.eventos.push(c)
+    }
   }
 
   return [...map.values()]
@@ -68,13 +79,23 @@ const groups = computed<DayGroup[]>(() => {
       :key="group.date.toISOString()"
       class="cal-agenda__group"
     >
-      <header class="cal-agenda__date-header" @click="$emit('slotClick', group.date)">
+      <!-- ADR-005 IA-005: header colorido quando o dia tem fundo_dia -->
+      <header
+        :class="[
+          'cal-agenda__date-header',
+          group.fundoDia ? `cal-agenda__date-header--fundo-${tipoCssKey(group.fundoDia.tipo)}` : '',
+        ]"
+        @click="$emit('slotClick', group.date)"
+      >
         <span class="cal-agenda__date-label">{{ group.label }}</span>
-        <span class="cal-agenda__count">{{ group.items.length }} compromisso(s)</span>
+        <span v-if="group.fundoDia" class="cal-agenda__fundo-badge">
+          {{ group.fundoDia.titulo }}
+        </span>
+        <span class="cal-agenda__count">{{ group.eventos.length }} compromisso(s)</span>
       </header>
 
       <div class="cal-agenda__items">
-        <div v-for="c in group.items" :key="c.id" class="cal-agenda__item">
+        <div v-for="c in group.eventos" :key="c.id" class="cal-agenda__item">
           <span class="cal-agenda__item-time">
             {{ formatTimeBR(parseLocal(c.dataInicio)) }}
           </span>
@@ -110,9 +131,27 @@ const groups = computed<DayGroup[]>(() => {
 
   &__date-header {
     @include flex(row, baseline, space-between, $spacing-3);
-    padding: $spacing-2 0;
+    padding: $spacing-2 $spacing-3;
     border-bottom: 2px solid var(--color-accent);
+    border-radius: $radius-sm $radius-sm 0 0;
     cursor: pointer;
+
+    // ADR-005 IA-005 / ADR-002 PA-011: header colorido para dias com fundo_dia
+    @each $tipo in feriado, ponto-facultativo, recesso {
+      &--fundo-#{$tipo} {
+        background-color: var(--color-tipo-#{$tipo}-bg);
+        border-bottom-color: var(--color-tipo-#{$tipo});
+      }
+    }
+  }
+
+  &__fundo-badge {
+    font-size: $font-size-xs;
+    font-weight: $font-weight-medium;
+    color: var(--color-text-secondary);
+    padding: 2px $spacing-2;
+    border-radius: $radius-full;
+    background-color: rgba(0, 0, 0, 0.08);
   }
 
   &__date-label {
