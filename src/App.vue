@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppHeader from './components/layout/AppHeader.vue'
 import CalendarView from './components/features/agenda/views/CalendarView.vue'
+import AppToastContainer from './components/primitives/AppToastContainer.vue'
 </script>
 
 <template>
@@ -9,6 +10,9 @@ import CalendarView from './components/features/agenda/views/CalendarView.vue'
     <main class="app-layout__main">
       <CalendarView />
     </main>
+
+    <!-- Sistema de toasts — singleton, registrado uma única vez aqui -->
+    <AppToastContainer />
   </div>
 </template>
 

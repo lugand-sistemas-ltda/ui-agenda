@@ -9,6 +9,7 @@ import AppSelect from '../../primitives/AppSelect.vue'
 import AppTextarea from '../../primitives/AppTextarea.vue'
 import AppButton from '../../primitives/AppButton.vue'
 import AppText from '../../primitives/AppText.vue'
+import AppAlert from '../../primitives/AppAlert.vue'
 import { toDatetimeLocal, fromDatetimeLocal, addDays, parseLocal } from '../../../utils/dateUtils'
 import { useAgenda } from '../../../composables/useAgenda'
 import type { UsuarioAPI } from '../../../services/agenda.service'
@@ -84,6 +85,11 @@ const errors  = reactive<Partial<Record<keyof typeof form | 'generic', string>>>
 // ---- Alerta de conflito CONFLITO-B (RN-008) ----
 const conflictAlert = ref<string | null>(null)
 
+// ---- Confirmações via modal ----
+const showDeleteConfirm = ref(false)
+const showSaveConfirm   = ref(false)
+const pendingPayload    = ref<CompromissoPayload | null>(null)
+
 // ---- Alerta de feriado (RN-006) ----
 const { getByDay } = useAgenda()
 
@@ -98,7 +104,12 @@ const feriadoAlert = computed(() => {
 
 // Preenche o form quando o modal abre
 watch(() => props.open, (open) => {
-  if (!open) return
+  if (!open) {
+    showDeleteConfirm.value = false
+    showSaveConfirm.value   = false
+    pendingPayload.value    = null
+    return
+  }
   Object.assign(errors, {})
   conflictAlert.value = null
   if (props.compromisso) {
@@ -160,7 +171,7 @@ function validate(): boolean {
     ok = false
   }
   if (!form.responsavelId) {
-    errors.responsavelNome = 'Responsável é obrigatório'
+    errors.responsavelId = 'Responsável é obrigatório'
     ok = false
   }
 
@@ -183,7 +194,7 @@ async function handleSubmit() {
         excluirId:     props.compromisso?.id,
       })
       if (conflitos.length) {
-        conflictAlert.value = `⚠️ Conflito de agenda: ${responsavelUser?.nome ?? 'responsável'} já possui "${conflitos[0].titulo}" neste horário.`
+        conflictAlert.value = `${responsavelUser?.nome ?? 'Responsável'} já possui "${conflitos[0].titulo}" neste horário.`
       }
     } catch {
       // silencioso — não bloqueia o salvamento se o endpoint falhar
@@ -210,18 +221,38 @@ async function handleSubmit() {
     observacoes: form.observacoes.trim() || undefined,
   }
 
-  emit('save', payload, props.compromisso?.id)
+  if (props.compromisso) {
+    // Edição: guardar payload e pedir confirmação
+    pendingPayload.value  = payload
+    showSaveConfirm.value = true
+  } else {
+    // Criação: emitir direto, sem confirmação
+    emit('save', payload)
+  }
+}
+
+function confirmSave() {
+  if (!pendingPayload.value) return
+  emit('save', pendingPayload.value, props.compromisso!.id)
+  showSaveConfirm.value = false
+  pendingPayload.value  = null
 }
 </script>
 
 <template>
-  <AppModal :open="open" size="md" @close="$emit('close')">
-    <form class="comp-modal" novalidate @submit.prevent="handleSubmit">
-      <!-- Cabeçalho -->
-      <div class="comp-modal__header">
-        <AppText tag="h2" size="lg" weight="semibold">{{ modalTitle }}</AppText>
-        <AppButton variant="icon" type="button" aria-label="Fechar" @click="$emit('close')">✕</AppButton>
-      </div>
+  <!--
+    AppModal fornece: header (via prop title + close auto), body (slot default, scrollável),
+    footer (slot #footer). A <form> usa display:contents para herdar o gap do app-modal__body.
+  -->
+  <AppModal
+    :open="open"
+    :title="modalTitle"
+    size="md"
+    @close="$emit('close')"
+  >
+    <!-- Body: apenas os campos. display:contents faz o gap do app-modal__body cobrir os filhos. -->
+    <form id="comp-form" class="comp-modal__form" novalidate @submit.prevent="handleSubmit">
+      <!-- Tipo -->
 
       <!-- Corpo com scroll -->
       <div class="comp-modal__body">
@@ -242,196 +273,202 @@ async function handleSubmit() {
           :error="errors.titulo"
         />
 
-        <!-- Alerta de feriado (RN-006) -->
-        <div v-if="feriadoAlert" class="comp-modal__alert" role="alert">
-          ⚠️ Esta data possui um <strong>{{ feriadoAlert.tipo === 'feriado' ? 'feriado' : 'ponto facultativo' }}</strong> registrado: {{ feriadoAlert.titulo }}
-        </div>
+      <!-- Alerta de feriado (RN-006, CONFLITO-A) -->
+      <AppAlert
+        v-if="feriadoAlert"
+        variant="warning"
+        :title="feriadoAlert.tipo === 'feriado' ? 'Feriado' : 'Ponto Facultativo'"
+      >
+        {{ feriadoAlert.titulo }} está registrado nesta data.
+      </AppAlert>
 
-        <!-- Alerta de conflito CONFLITO-B (RN-008) — não bloqueante -->
-        <div v-if="conflictAlert" class="comp-modal__alert comp-modal__alert--conflict" role="alert">
-          {{ conflictAlert }}
-        </div>
+      <!-- Alerta de conflito CONFLITO-B (RN-008) — não bloqueante -->
+      <AppAlert v-if="conflictAlert" variant="warning" title="Conflito de agenda">
+        {{ conflictAlert }}
+      </AppAlert>
 
-        <!-- Datas -->
-        <div class="comp-modal__row">
-          <AppInput
-            id="dataInicio"
-            v-model="form.dataInicio"
-            type="datetime-local"
-            label="Início"
-            :error="errors.dataInicio"
-          />
-          <AppInput
-            id="dataFim"
-            v-model="form.dataFim"
-            type="datetime-local"
-            label="Término"
-            :error="errors.dataFim"
-          />
-        </div>
-
-        <!-- Status -->
-        <AppSelect
-          id="status"
-          v-model="form.status"
-          :options="statusOptions"
-          label="Status"
-        />
-
-        <!-- Responsável -->
-        <AppSelect
-          id="responsavel"
-          v-model="form.responsavelId"
-          :options="usuarioOptions"
-          label="Responsável"
-          placeholder="Selecione o responsável"
-          :error="errors.responsavelNome"
-        />
-
-        <!-- Outros responsáveis -->
-        <div class="comp-modal__outros">
-          <div class="comp-modal__outros-header">
-            <AppText tag="span" size="sm" weight="medium">Outros responsáveis</AppText>
-            <AppButton variant="ghost" size="sm" type="button" @click="addOutro">
-              + Adicionar
-            </AppButton>
-          </div>
-          <div
-            v-for="(_, idx) in form.outrosIds"
-            :key="idx"
-            class="comp-modal__outro-row"
-          >
-            <AppSelect
-              :id="`outro-${idx}`"
-              v-model="form.outrosIds[idx]"
-              :options="usuarioOptions"
-              :placeholder="`Responsável ${idx + 1}`"
-            />
-            <AppButton variant="icon" size="sm" type="button" aria-label="Remover" @click="removeOutro(idx)">
-              ✕
-            </AppButton>
-          </div>
-        </div>
-
-        <!-- Local -->
+      <!-- Datas -->
+      <div class="comp-modal__row">
         <AppInput
-          id="local"
-          v-model="form.local"
-          label="Local"
-          placeholder="Local do compromisso (opcional)"
+          id="dataInicio"
+          v-model="form.dataInicio"
+          type="datetime-local"
+          label="Início"
+          :error="errors.dataInicio"
         />
-
-        <!-- Descrição -->
         <AppInput
-          id="descricao"
-          v-model="form.descricao"
-          label="Descrição"
-          placeholder="Descrição breve (opcional)"
-        />
-
-        <!-- Observações -->
-        <AppTextarea
-          id="observacoes"
-          v-model="form.observacoes"
-          label="Observações"
-          placeholder="Observações adicionais (opcional)"
-          :rows="3"
+          id="dataFim"
+          v-model="form.dataFim"
+          type="datetime-local"
+          label="Término"
+          :error="errors.dataFim"
         />
       </div>
 
-      <!-- Rodapé -->
-      <div class="comp-modal__footer">
-        <AppButton
-          v-if="compromisso"
-          variant="danger"
-          type="button"
-          @click="$emit('delete', compromisso.id)"
+      <!-- Status -->
+      <AppSelect
+        id="status"
+        v-model="form.status"
+        :options="statusOptions"
+        label="Status"
+      />
+
+      <!-- Responsável -->
+      <AppSelect
+        id="responsavel"
+        v-model="form.responsavelId"
+        :options="usuarioOptions"
+        label="Responsável"
+        placeholder="Selecione o responsável"
+        :error="errors.responsavelId"
+      />
+
+      <!-- Outros responsáveis -->
+      <div class="comp-modal__outros">
+        <div class="comp-modal__outros-header">
+          <AppText tag="span" size="sm" weight="medium">Outros responsáveis</AppText>
+          <AppButton variant="ghost" size="sm" type="button" @click="addOutro">
+            + Adicionar
+          </AppButton>
+        </div>
+        <div
+          v-for="(_, idx) in form.outrosIds"
+          :key="idx"
+          class="comp-modal__outro-row"
         >
-          Excluir
-        </AppButton>
-        <div class="comp-modal__footer-actions">
-          <AppButton variant="ghost" type="button" @click="$emit('close')">Cancelar</AppButton>
-          <AppButton variant="primary" type="submit">
-            {{ compromisso ? 'Salvar alterações' : 'Criar compromisso' }}
+          <AppSelect
+            :id="`outro-${idx}`"
+            v-model="form.outrosIds[idx]"
+            :options="usuarioOptions"
+            :placeholder="`Responsável ${idx + 1}`"
+          />
+          <AppButton variant="icon" size="sm" type="button" aria-label="Remover" @click="removeOutro(idx)">
+            ✕
           </AppButton>
         </div>
       </div>
+
+      <!-- Local -->
+      <AppInput
+        id="local"
+        v-model="form.local"
+        label="Local"
+        placeholder="Local do compromisso (opcional)"
+      />
+
+      <!-- Descrição -->
+      <AppInput
+        id="descricao"
+        v-model="form.descricao"
+        label="Descrição"
+        placeholder="Descrição breve (opcional)"
+      />
+
+      <!-- Observações -->
+      <AppTextarea
+        id="observacoes"
+        v-model="form.observacoes"
+        label="Observações"
+        placeholder="Observações adicionais (opcional)"
+        :rows="3"
+      />
+    </div>
     </form>
+
+    <!-- Rodapé: ações desacopladas do form — submit via form="comp-form" -->
+    <template #footer>
+      <AppButton
+        v-if="compromisso"
+        variant="danger"
+        type="button"
+        @click="showDeleteConfirm = true"
+      >
+        Excluir
+      </AppButton>
+      <div class="comp-modal__actions">
+        <AppButton variant="ghost" type="button" @click="$emit('close')">Cancelar</AppButton>
+        <AppButton variant="primary" type="submit" form="comp-form">
+          {{ compromisso ? 'Salvar alterações' : 'Criar compromisso' }}
+        </AppButton>
+      </div>
+    </template>
   </AppModal>
+
+  <!-- Modal de confirmação de exclusão -->
+  <AppModal
+    :open="showDeleteConfirm"
+    title="Excluir compromisso"
+    size="sm"
+    @close="showDeleteConfirm = false"
+  >
+    <AppText>Tem certeza que deseja excluir <strong>{{ compromisso?.titulo }}</strong>? Esta ação não pode ser desfeita.</AppText>
+    <template #footer>
+      <div class="comp-modal__actions">
+        <AppButton variant="ghost" type="button" @click="showDeleteConfirm = false">Cancelar</AppButton>
+        <AppButton variant="danger" type="button" @click="$emit('delete', compromisso!.id)">
+          Confirmar exclusão
+        </AppButton>
+      </div>
+    </template>
+  </AppModal>
+
+  <!-- Modal de confirmação de alteração -->
+  <AppModal
+    :open="showSaveConfirm"
+    title="Salvar alterações"
+    size="sm"
+    @close="showSaveConfirm = false"
+  >
+    <AppText>Deseja salvar as alterações realizadas em <strong>{{ compromisso?.titulo }}</strong>?</AppText>
+    <template #footer>
+      <div class="comp-modal__actions">
+        <AppButton variant="ghost" type="button" @click="showSaveConfirm = false">Cancelar</AppButton>
+        <AppButton variant="primary" type="button" @click="confirmSave">
+          Salvar alterações
+        </AppButton>
+      </div>
+    </template>
+  </AppModal>
+
 </template>
 
 <style lang="scss" scoped>
 @use 'styles/abstracts' as *;
 
-.comp-modal {
+// display:contents → a <form> é invisível como caixa de layout;
+// o flex+gap do app-modal__body aplica-se diretamente aos filhos do form.
+.comp-modal__form {
+  display: contents;
+}
+
+// Grid de duas colunas para datas
+.comp-modal__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: $spacing-4;
+
+  @media (max-width: 480px) { grid-template-columns: 1fr; }
+}
+
+// Lista de outros responsáveis
+.comp-modal__outros {
   display: flex;
   flex-direction: column;
-  max-height: inherit;
+  gap: $spacing-2;
+}
 
-  &__header {
-    @include flex(row, center, space-between, $spacing-2);
-    padding: $spacing-4 $spacing-6;
-    border-bottom: 1px solid var(--color-border);
-    flex-shrink: 0;
-  }
+.comp-modal__outros-header {
+  @include flex(row, center, space-between, $spacing-2);
+}
 
-  &__body {
-    flex: 1;
-    overflow-y: auto;
-    padding: $spacing-4 $spacing-6;
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-4;
-  }
+.comp-modal__outro-row {
+  @include flex(row, flex-start, flex-start, $spacing-2);
+  :deep(.app-input) { flex: 1; }
+}
 
-  &__row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: $spacing-4;
-
-    @media (max-width: 480px) { grid-template-columns: 1fr; }
-  }
-
-  &__outros {
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-2;
-  }
-
-  &__outros-header {
-    @include flex(row, center, space-between, $spacing-2);
-  }
-
-  &__outro-row {
-    @include flex(row, flex-start, flex-start, $spacing-2);
-
-    .app-input { flex: 1; }
-  }
-
-  &__alert {
-    padding: $spacing-3 $spacing-4;
-    border-radius: $radius-md;
-    background-color: var(--color-status-bg-pending);
-    color: var(--color-text-primary);
-    font-size: $font-size-sm;
-    border: 1px solid var(--color-status-pending);
-
-    &--conflict {
-      background-color: var(--color-status-bg-cancelled);
-      border-color: var(--color-status-cancelled);
-    }
-  }
-
-  &__footer {
-    @include flex(row, center, space-between, $spacing-3);
-    padding: $spacing-4 $spacing-6;
-    border-top: 1px solid var(--color-border);
-    flex-shrink: 0;
-  }
-
-  &__footer-actions {
-    @include flex(row, center, flex-end, $spacing-3);
-    margin-left: auto;
-  }
+// Botões de ação do footer — empurra para a direita
+.comp-modal__actions {
+  @include flex(row, center, flex-end, $spacing-3);
+  margin-left: auto;
 }
 </style>

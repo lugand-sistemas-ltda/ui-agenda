@@ -3,7 +3,9 @@ import { ref, computed, watch, onMounted } from 'vue'
 import type { Compromisso, CalendarViewType, CompromissoPayload } from '../../../../types/agenda'
 import { addDays, addWeeks, addMonths, addYears } from '../../../../utils/dateUtils'
 import { useAgenda } from '../../../../composables/useAgenda'
+import { useToast } from '../../../../composables/useToast'
 import CalendarHeader  from '../CalendarHeader.vue'
+import AppAlert        from '../../../primitives/AppAlert.vue'
 import CalendarMonth   from './CalendarMonth.vue'
 import CalendarWeek    from './CalendarWeek.vue'
 import CalendarDay     from './CalendarDay.vue'
@@ -21,6 +23,7 @@ const modalDefaultDate  = ref<Date | null>(null)
 
 // ---- Composable ----
 const { getByMonth, addCompromisso, updateCompromisso, removeCompromisso, fetchByMonth, loading, error } = useAgenda()
+const { success: toastSuccess, error: toastError } = useToast()
 
 // ---- Carregamento de dados ----
 
@@ -114,17 +117,28 @@ function closeModal() {
 }
 
 async function handleSave(payload: CompromissoPayload, id?: string) {
-  if (id) {
-    await updateCompromisso(id, payload)
-  } else {
-    await addCompromisso(payload)
+  try {
+    if (id) {
+      await updateCompromisso(id, payload)
+      toastSuccess('Compromisso atualizado com sucesso.')
+    } else {
+      await addCompromisso(payload)
+      toastSuccess('Compromisso criado com sucesso.')
+    }
+    closeModal()
+  } catch {
+    toastError('Não foi possível salvar o compromisso.', 'Erro ao salvar')
   }
-  closeModal()
 }
 
 async function handleDelete(id: string) {
-  await removeCompromisso(id)
-  closeModal()
+  try {
+    await removeCompromisso(id)
+    closeModal()
+    toastSuccess('Compromisso excluído com sucesso.')
+  } catch {
+    toastError('Não foi possível excluir o compromisso.', 'Erro ao excluir')
+  }
 }
 
 // ---- Slot click: navegar para o dia e abrir modal ----
@@ -141,9 +155,9 @@ function handleSlotClick(date: Date) {
 <template>
   <div class="calendar-view">
     <!-- Banner de erro -->
-    <div v-if="error" class="calendar-view__error" role="alert">
-      ⚠️ Erro ao carregar dados: {{ error }}
-    </div>
+    <AppAlert v-if="error" variant="error" title="Erro ao carregar dados" class="calendar-view__error-alert">
+      {{ error }}
+    </AppAlert>
 
     <CalendarHeader
       :current-date="currentDate"
@@ -249,13 +263,9 @@ function handleSlotClick(date: Date) {
     animation: spin 0.7s linear infinite;
   }
 
-  &__error {
-    padding: $spacing-2 $spacing-4;
-    background-color: var(--color-status-bg-cancelled);
-    border-bottom: 1px solid var(--color-status-cancelled);
-    color: var(--color-text-primary);
-    font-size: $font-size-sm;
+  &__error-alert {
     flex-shrink: 0;
+    border-radius: 0;
   }
 }
 
