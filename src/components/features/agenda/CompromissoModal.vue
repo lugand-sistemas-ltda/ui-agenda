@@ -21,9 +21,15 @@ const props = withDefaults(defineProps<{
   compromisso?: Compromisso | null
   /** Data/hora pré-preenchida ao criar pelo calendário */
   defaultDate?: Date | null
+  /** ID da agenda que receberá o item criado (agenda pessoal ativa) */
+  agendaId?: string | null
+  /** Quando false, o modal é somente leitura para criação (ex.: agenda da unidade) */
+  canCreate?: boolean
 }>(), {
   compromisso: null,
   defaultDate: null,
+  agendaId:    null,
+  canCreate:   true,
 })
 
 const emit = defineEmits<{
@@ -229,6 +235,7 @@ async function handleSubmit() {
       }),
     local:       form.local.trim() || undefined,
     observacoes: form.observacoes.trim() || undefined,
+    agendaId:    props.agendaId ?? undefined,
   }
 
   if (props.compromisso) {
@@ -260,8 +267,15 @@ function confirmSave() {
     size="md"
     @close="$emit('close')"
   >
-    <!-- Body: apenas os campos. display:contents faz o gap do app-modal__body cobrir os filhos. -->
-    <form id="comp-form" class="comp-modal__form" novalidate @submit.prevent="handleSubmit">
+    <!-- Modo somente leitura para criação (ex.: agenda da unidade) -->
+    <template v-if="!canCreate && !compromisso">
+      <AppAlert variant="info" title="Agenda somente leitura">
+        Esta agenda é de visualização apenas. Selecione <strong>Minha Agenda</strong> para criar novos compromissos.
+      </AppAlert>
+    </template>
+
+    <!-- Formulário: criação ou edição -->
+    <form v-else id="comp-form" class="comp-modal__form" novalidate @submit.prevent="handleSubmit">
       <!-- Tipo -->
 
       <!-- Corpo com scroll -->
@@ -390,8 +404,13 @@ function confirmSave() {
     </div>
     </form>
 
-    <!-- Rodapé: ações desacopladas do form — submit via form="comp-form" -->
     <template #footer>
+      <template v-if="!canCreate && !compromisso">
+        <div class="comp-modal__actions">
+          <AppButton variant="ghost" type="button" @click="$emit('close')">Fechar</AppButton>
+        </div>
+      </template>
+      <template v-else>
       <AppButton
         v-if="compromisso"
         variant="danger"
@@ -401,11 +420,12 @@ function confirmSave() {
         Excluir
       </AppButton>
       <div class="comp-modal__actions">
-        <AppButton variant="ghost" type="button" @click="$emit('close')">Cancelar</AppButton>
-        <AppButton variant="primary" type="submit" form="comp-form">
-          {{ compromisso ? 'Salvar alterações' : 'Criar compromisso' }}
-        </AppButton>
-      </div>
+          <AppButton variant="ghost" type="button" @click="$emit('close')">Cancelar</AppButton>
+          <AppButton variant="primary" type="submit" form="comp-form">
+            {{ compromisso ? 'Salvar alterações' : 'Criar compromisso' }}
+          </AppButton>
+        </div>
+      </template>
     </template>
   </AppModal>
 

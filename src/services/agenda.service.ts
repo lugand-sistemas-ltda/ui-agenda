@@ -17,6 +17,17 @@ export interface UsuarioAPI {
   email: string
 }
 
+// ---- Agenda (Iteração 2) ----
+export interface AgendaAPI {
+  id:             string
+  nome:           string
+  tipo:           string
+  proprietarioId: string | null
+  grupoId:        string | null
+  ativa:          boolean
+  papel:          string | null
+}
+
 export interface CompromissoAPI {
   id: string
   titulo: string
@@ -93,12 +104,24 @@ export const usuarioService = {
 }
 
 // =============================================================================
+// AGENDAS (Iteração 2)
+// =============================================================================
+
+export const agendaService = {
+  listar: (): Promise<AgendaAPI[]> =>
+    request('/api/agendas'),
+
+  consolidada: (usuarioId: string): Promise<AgendaAPI[]> =>
+    request(`/api/agendas/consolidada?usuarioId=${usuarioId}`),
+}
+
+// =============================================================================
 // COMPROMISSOS
 // =============================================================================
 
 export const compromissoService = {
-  /** Lista todos — ou filtra por ?ano&mes ou ?ano&mes&dia */
-  listar: (params?: { ano?: number; mes?: number; dia?: number }): Promise<CompromissoAPI[]> => {
+  /** Lista todos — ou filtra por ?ano&mes ou ?ano&mes&dia ou ?agendaId */
+  listar: (params?: { ano?: number; mes?: number; dia?: number; agendaId?: string }): Promise<CompromissoAPI[]> => {
     const qs = params ? new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v != null)

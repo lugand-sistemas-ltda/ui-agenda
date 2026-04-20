@@ -1,10 +1,16 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { useTheme } from '../../composables/useTheme'
+import { useSession } from '../../composables/useSession'
+import { PAPEL_LABELS } from '../../types/agenda'
 import AppContainer from '../primitives/AppContainer.vue'
 import AppText from '../primitives/AppText.vue'
 import AppButton from '../primitives/AppButton.vue'
 
 const { theme, toggleTheme } = useTheme()
+const { usuarios, usuarioAtivo, papelNaUnidade, selecionarUsuario, init } = useSession()
+
+onMounted(init)
 </script>
 
 <template>
@@ -17,6 +23,23 @@ const { theme, toggleTheme } = useTheme()
 
       <!-- Ações do header -->
       <div class="app-header__actions">
+        <!-- Seletor de usuário ativo (login simples — Iteração 2) -->
+        <div class="app-header__session">
+          <select
+            class="app-header__user-select"
+            :value="usuarioAtivo?.id ?? ''"
+            :aria-label="'Usuário ativo'"
+            @change="e => selecionarUsuario((e.target as HTMLSelectElement).value || null)"
+          >
+            <option value="">— Selecionar usuário —</option>
+            <option v-for="u in usuarios" :key="u.id" :value="u.id">
+              {{ u.nome }}
+            </option>
+          </select>
+          <span v-if="papelNaUnidade" class="app-header__papel">
+            {{ PAPEL_LABELS[papelNaUnidade as keyof typeof PAPEL_LABELS] ?? papelNaUnidade }}
+          </span>
+        </div>
         <AppButton
           variant="icon"
           size="sm"
@@ -94,6 +117,35 @@ const { theme, toggleTheme } = useTheme()
     margin: 0;
     letter-spacing: -0.01em;
     user-select: none;
+  }
+
+  &__session {
+    @include flex(row, center, flex-start, $spacing-2);
+  }
+
+  &__user-select {
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: var(--color-text-primary);
+    background-color: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: $radius-md;
+    padding: $spacing-1 $spacing-3;
+    cursor: pointer;
+    outline: none;
+    transition: border-color $transition-fast;
+
+    &:focus-visible { border-color: var(--color-accent); }
+  }
+
+  &__papel {
+    font-size: $font-size-xs;
+    font-weight: $font-weight-medium;
+    color: var(--color-accent);
+    background-color: var(--color-accent-subtle);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+    border-radius: $radius-full;
+    padding: 2px $spacing-2;
   }
 
   &__actions {

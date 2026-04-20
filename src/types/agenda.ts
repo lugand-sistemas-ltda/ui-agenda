@@ -79,6 +79,47 @@ export const STATUS_LABELS: Record<CompromissoStatus, string> = {
   cancelado:  'Cancelado',
 }
 
+// =============================================================================
+// AGENDA E SESSÃO (Iteração 2)
+// =============================================================================
+
+export type TipoAgenda = 'pessoal' | 'grupo' | 'unidade' | 'sistema'
+
+export type PapelGrupo =
+  | 'administrador'
+  | 'gestor'
+  | 'operador'
+  | 'secretaria'
+  | 'estagiario'
+  | 'proprietario'
+
+export interface Agenda {
+  id:             string
+  nome:           string
+  tipo:           TipoAgenda
+  proprietarioId: string | null
+  grupoId:        string | null
+  ativa:          boolean
+  /** Preenchido pela rota /consolidada — papel do usuário nesta agenda */
+  papel:          PapelGrupo | null
+}
+
+export const PAPEL_LABELS: Record<PapelGrupo, string> = {
+  administrador: 'Administrador',
+  gestor:        'Gestor',
+  operador:      'Operador',
+  secretaria:    'Secretaria',
+  estagiario:    'Estagiário',
+  proprietario:  'Proprietário',
+}
+
+export const TIPO_AGENDA_LABELS: Record<TipoAgenda, string> = {
+  pessoal:  'Pessoal',
+  grupo:    'Grupo',
+  unidade:  'Unidade',
+  sistema:  'Sistema',
+}
+
 export const VIEW_LABELS: Record<CalendarViewType, string> = {
   mes:     'Mês',
   semana:  'Semana',

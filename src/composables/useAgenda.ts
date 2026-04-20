@@ -44,19 +44,42 @@ export function useAgenda() {
 
   // --- CARREGAMENTO ---------------------------------------------------------
 
-  async function fetchByMonth(year: number, month: number): Promise<void> {
+  /**
+   * Busca os compromissos de um mês.
+   *
+   * @param agendaIds  Se fornecido, busca apenas as agendas listadas (filtro de sessão).
+   *                   Se vazio, busca todos (comportamento sem sessão ativa).
+   */
+  async function fetchByMonth(year: number, month: number, agendaIds?: string[]): Promise<void> {
     loading.value = true
     error.value   = null
     try {
-      // API recebe mes 1-based; JS Date.getMonth() é 0-based → +1
-      const data = await compromissoService.listar({ ano: year, mes: month + 1 })
+      let fetched: ReturnType<typeof fromAPI>[] = []
+
+      if (agendaIds && agendaIds.length > 0) {
+        // Busca paralela por cada agenda do usuário
+        const results = await Promise.all(
+          agendaIds.map(agendaId =>
+            compromissoService.listar({ ano: year, mes: month + 1, agendaId }),
+          ),
+        )
+        fetched = results.flat().map(fromAPI)
+        // Deduplica por id (itens de unidade podem repetir em cenários futuros)
+        const seen = new Set<string>()
+        fetched = fetched.filter(c => seen.has(c.id) ? false : (seen.add(c.id), true))
+      } else {
+        // Sem sessão — busca sem filtro de agenda
+        const data = await compromissoService.listar({ ano: year, mes: month + 1 })
+        fetched = data.map(fromAPI)
+      }
+
       // Mescla com o estado: remove os do mesmo mês e reinsere os novos
       compromissos.value = [
         ...compromissos.value.filter(c => {
           const d = parseLocal(c.dataInicio)
           return !(d.getFullYear() === year && d.getMonth() === month)
         }),
-        ...data.map(fromAPI),
+        ...fetched,
       ]
     } catch (e) {
       error.value = String(e)

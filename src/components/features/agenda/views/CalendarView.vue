@@ -3,9 +3,11 @@ import { ref, computed, watch, onMounted } from 'vue'
 import type { Compromisso, CalendarViewType, CompromissoPayload } from '../../../../types/agenda'
 import { addDays, addWeeks, addMonths, addYears } from '../../../../utils/dateUtils'
 import { useAgenda } from '../../../../composables/useAgenda'
+import { useSession } from '../../../../composables/useSession'
 import { useToast } from '../../../../composables/useToast'
 import CalendarHeader  from '../CalendarHeader.vue'
 import AppAlert        from '../../../primitives/AppAlert.vue'
+import AgendaFilter    from '../AgendaFilter.vue'
 import CalendarMonth   from './CalendarMonth.vue'
 import CalendarWeek    from './CalendarWeek.vue'
 import CalendarDay     from './CalendarDay.vue'
@@ -30,27 +32,39 @@ const modalDefaultDate  = ref<Date | null>(null)
 
 // ---- Composable ----
 const { getByMonth, addCompromisso, updateCompromisso, removeCompromisso, fetchByMonth, loading, error } = useAgenda()
+const { agendas, selectedAgendaId, agendaAtiva, selecionarAgenda } = useSession()
 const { success: toastSuccess, error: toastError } = useToast()
+
+// ---- Permissões: só a agenda pessoal permite criação nesta iteração ----
+const canCreate = computed(() =>
+  agendaAtiva.value === null || agendaAtiva.value.tipo === 'pessoal',
+)
+
+// ID da agenda que receberá itens criados (sempre a pessoal)
+const agendaIdParaCriacao = computed<string | undefined>(() =>
+  agendaAtiva.value?.tipo === 'pessoal' ? agendaAtiva.value.id : undefined,
+)
 
 // ---- Carregamento de dados ----
 
 async function loadForCurrentView(): Promise<void> {
-  const d    = currentDate.value
-  const year = d.getFullYear()
+  const d     = currentDate.value
+  const year  = d.getFullYear()
   const month = d.getMonth()
+  const ids   = selectedAgendaId.value ? [selectedAgendaId.value] : undefined
 
   if (currentView.value === 'ano') {
-    await Promise.all(Array.from({ length: 12 }, (_, m) => fetchByMonth(year, m)))
+    await Promise.all(Array.from({ length: 12 }, (_, m) => fetchByMonth(year, m, ids)))
   } else if (currentView.value === 'agenda') {
     // Carrega tantos meses quantos forem necessários para cobrir agendaDaysAhead
     await Promise.all(
       Array.from({ length: agendaMonthCount.value }, (_, i) => {
-        const d = new Date(year, month + i, 1)
-        return fetchByMonth(d.getFullYear(), d.getMonth())
+        const nd = new Date(year, month + i, 1)
+        return fetchByMonth(nd.getFullYear(), nd.getMonth(), ids)
       }),
     )
   } else {
-    await fetchByMonth(year, month)
+    await fetchByMonth(year, month, ids)
   }
 }
 
@@ -60,6 +74,8 @@ watch([currentDate, currentView], (_, [, prevView]) => {
   if (currentView.value === 'agenda') agendaDaysAhead.value = AGENDA_DAYS_INITIAL
   loadForCurrentView()
 })
+// Recarrega quando a agenda selecionada muda
+watch(selectedAgendaId, () => { loadForCurrentView() })
 
 // ---- Compromissos filtrados para a view atual ----
 const viewCompromissos = computed(() => {
@@ -164,11 +180,12 @@ async function handleAgendaLoadMore(): Promise<void> {
   if (agendaLoadingMore.value) return
   agendaLoadingMore.value = true
   try {
-    const d              = currentDate.value
-    const nextOffset     = agendaMonthCount.value  // índice do mês ainda não carregado
+    const d          = currentDate.value
+    const nextOffset = agendaMonthCount.value
     agendaDaysAhead.value += AGENDA_DAYS_STEP
-    const nd = new Date(d.getFullYear(), d.getMonth() + nextOffset, 1)
-    await fetchByMonth(nd.getFullYear(), nd.getMonth())
+    const nd  = new Date(d.getFullYear(), d.getMonth() + nextOffset, 1)
+    const ids = selectedAgendaId.value ? [selectedAgendaId.value] : undefined
+    await fetchByMonth(nd.getFullYear(), nd.getMonth(), ids)
   } finally {
     agendaLoadingMore.value = false
   }
@@ -199,6 +216,13 @@ function handleSlotClick(date: Date) {
       @today="navigateToday"
       @change-view="v => currentView = v"
       @new-compromisso="openNewModal()"
+    />
+
+    <!-- Seletor de agenda: pills Minha Agenda / Agenda da Unidade / ... -->
+    <AgendaFilter
+      :agendas="agendas"
+      :selected-id="selectedAgendaId"
+      @select="selecionarAgenda"
     />
 
     <div class="calendar-view__body">
@@ -249,6 +273,8 @@ function handleSlotClick(date: Date) {
       :open="modalOpen"
       :compromisso="editingCompromisso"
       :default-date="modalDefaultDate"
+      :agenda-id="agendaIdParaCriacao"
+      :can-create="canCreate"
       @close="closeModal"
       @save="handleSave"
       @delete="handleDelete"
