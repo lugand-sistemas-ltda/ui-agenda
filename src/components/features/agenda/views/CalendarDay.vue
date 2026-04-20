@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, watch, nextTick } from 'vue'
 import type { Compromisso } from '../../../../types/agenda'
 import {
   getTimeSlots,
@@ -9,8 +9,8 @@ import {
 } from '../../../../utils/dateUtils'
 import CompromissoCard from '../CompromissoCard.vue'
 
-const START_HOUR = 7
-const END_HOUR   = 22
+const WORK_START = 7
+const WORK_END   = 22
 
 const props = defineProps<{
   currentDate: Date
@@ -22,7 +22,7 @@ const emit = defineEmits<{
   compromissoClick: [compromisso: Compromisso]
 }>()
 
-const timeSlots = computed(() => getTimeSlots(START_HOUR, END_HOUR))
+const timeSlots = computed(() => getTimeSlots(0, 23))
 
 const dayCompromissos = computed(() =>
   props.compromissos.filter(c => isSameDay(parseLocal(c.dataInicio), props.currentDate)),
@@ -43,6 +43,28 @@ function tipoCssKey(tipo: string): string {
   return tipo.replace(/_/g, '-')
 }
 
+function isOffHour(hour: number): boolean {
+  return hour < WORK_START || hour > WORK_END
+}
+
+const isWeekend = computed(() => {
+  const d = props.currentDate.getDay()
+  return d === 0 || d === 6
+})
+
+// Auto-scroll para o horário de expediente ao montar ou navegar
+const bodyRef = ref<HTMLElement | null>(null)
+
+function scrollToWorkHours(): void {
+  nextTick(() => {
+    const row = bodyRef.value?.querySelector<HTMLElement>(`[data-hour="${WORK_START}"]`)
+    row?.scrollIntoView({ block: 'start' })
+  })
+}
+
+onMounted(scrollToWorkHours)
+watch(() => props.currentDate, scrollToWorkHours)
+
 function slotDate(hour: number): Date {
   const d = new Date(props.currentDate)
   d.setHours(hour, 0, 0, 0)
@@ -61,18 +83,22 @@ function slotDate(hour: number): Date {
     </div>
 
     <!-- Aviso de compromissos fora do intervalo exibido -->
-    <div v-if="dayCompromissos.filter(c => getHourFromLocal(c.dataInicio) < START_HOUR || getHourFromLocal(c.dataInicio) > END_HOUR).length" class="cal-day__overflow-notice">
+    <div v-if="dayCompromissos.filter(c => getHourFromLocal(c.dataInicio) < WORK_START || getHourFromLocal(c.dataInicio) > WORK_END).length" class="cal-day__overflow-notice">
       {{
-        dayCompromissos.filter(c => getHourFromLocal(c.dataInicio) < START_HOUR || getHourFromLocal(c.dataInicio) > END_HOUR).length
-      }} compromisso(s) fora do intervalo 07:00–22:00
+        dayCompromissos.filter(c => getHourFromLocal(c.dataInicio) < WORK_START || getHourFromLocal(c.dataInicio) > WORK_END).length
+      }} compromisso(s) fora do expediente 07:00–22:00
     </div>
 
     <!-- Grade horária -->
-    <div class="cal-day__body">
+    <div ref="bodyRef" class="cal-day__body">
       <div
         v-for="slot in timeSlots"
         :key="slot"
-        class="cal-day__row"
+        :data-hour="parseInt(slot)"
+        :class="[
+          'cal-day__row',
+          { 'cal-day__row--off-hours': isOffHour(parseInt(slot)) || isWeekend },
+        ]"
         :aria-label="`${slot}`"
         @click="$emit('slotClick', slotDate(parseInt(slot)))"
       >
@@ -146,6 +172,11 @@ $time-gutter: 52px;
     transition: background-color $transition-fast;
 
     &:hover { background-color: var(--color-surface); }
+
+    &--off-hours {
+      background-color: var(--color-off-hours-bg);
+      &:hover { filter: brightness(0.97); background-color: var(--color-off-hours-bg); }
+    }
   }
 
   &__time-label {

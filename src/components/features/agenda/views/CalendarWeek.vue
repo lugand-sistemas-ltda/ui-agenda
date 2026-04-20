@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, watch, nextTick } from 'vue'
 import type { Compromisso } from '../../../../types/agenda'
 import {
   DAYS_SHORT_BR,
@@ -13,8 +13,8 @@ import {
 } from '../../../../utils/dateUtils'
 import CompromissoCard from '../CompromissoCard.vue'
 
-const START_HOUR = 7
-const END_HOUR   = 22
+const WORK_START = 7
+const WORK_END   = 22
 
 const props = defineProps<{
   currentDate: Date
@@ -27,7 +27,15 @@ const emit = defineEmits<{
 }>()
 
 const weekDays  = computed(() => getWeekDays(props.currentDate))
-const timeSlots = computed(() => getTimeSlots(START_HOUR, END_HOUR))
+const timeSlots = computed(() => getTimeSlots(0, 23))
+
+function isOffHour(hour: number): boolean {
+  return hour < WORK_START || hour > WORK_END
+}
+
+function isWeekend(day: Date): boolean {
+  return day.getDay() === 0 || day.getDay() === 6
+}
 
 function slotCompromissos(day: Date, hour: number): Compromisso[] {
   return props.compromissos.filter(c => {
@@ -49,6 +57,19 @@ function dayFundoDia(day: Date): Compromisso | undefined {
   )
 }
 
+// Auto-scroll para o horário de expediente ao montar ou navegar
+const bodyRef = ref<HTMLElement | null>(null)
+
+function scrollToWorkHours(): void {
+  nextTick(() => {
+    const row = bodyRef.value?.querySelector<HTMLElement>(`[data-hour="${WORK_START}"]`)
+    row?.scrollIntoView({ block: 'start' })
+  })
+}
+
+onMounted(scrollToWorkHours)
+watch(() => props.currentDate, scrollToWorkHours)
+
 function tipoCssKey(tipo: string): string {
   return tipo.replace(/_/g, '-')
 }
@@ -62,7 +83,11 @@ function tipoCssKey(tipo: string): string {
       <div
         v-for="day in weekDays"
         :key="day.toISOString()"
-        :class="['cal-week__day-header', { 'cal-week__day-header--today': isToday(day) }]"
+        :class="[
+          'cal-week__day-header',
+          { 'cal-week__day-header--today': isToday(day) },
+          { 'cal-week__day-header--weekend': isWeekend(day) },
+        ]"
       >
         <!-- ADR-005 IA-005: banda colorida quando o dia é fundo_dia (feriado, recesso…) -->
         <span
@@ -79,17 +104,21 @@ function tipoCssKey(tipo: string): string {
     </div>
 
     <!-- Grade de horários -->
-    <div class="cal-week__body">
+    <div ref="bodyRef" class="cal-week__body">
       <div
         v-for="slot in timeSlots"
         :key="slot"
-        class="cal-week__row"
+        :data-hour="parseInt(slot)"
+        :class="['cal-week__row', { 'cal-week__row--off-hours': isOffHour(parseInt(slot)) }]"
       >
         <span class="cal-week__time-label">{{ slot }}</span>
         <div
           v-for="day in weekDays"
           :key="day.toISOString()"
-          class="cal-week__cell"
+          :class="[
+            'cal-week__cell',
+            { 'cal-week__cell--off-hours': isOffHour(parseInt(slot)) || isWeekend(day) },
+          ]"
           :aria-label="`${formatDayMonthBR(day)} ${slot}`"
           @click="$emit('slotClick', slotDate(day, parseInt(slot)))"
         >
@@ -138,6 +167,10 @@ $cols: 7;
 
     &--today {
       background-color: var(--color-accent-subtle);
+    }
+
+    &--weekend {
+      background-color: var(--color-off-hours-bg);
     }
   }
 
@@ -215,6 +248,11 @@ $cols: 7;
     transition: background-color $transition-fast;
 
     &:hover { background-color: var(--color-surface); }
+
+    &--off-hours {
+      background-color: var(--color-off-hours-bg);
+      &:hover { filter: brightness(0.97); background-color: var(--color-off-hours-bg); }
+    }
   }
 }
 </style>

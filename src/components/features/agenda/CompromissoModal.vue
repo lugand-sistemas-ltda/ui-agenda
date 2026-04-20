@@ -102,6 +102,16 @@ const feriadoAlert = computed(() => {
   return hits.length ? hits[0] : null
 })
 
+// ---- Alerta de final de semana ----
+const weekendAlert = computed((): string | null => {
+  if (!form.dataInicio || feriadoAlert.value) return null
+  const date = parseLocal(form.dataInicio.length === 16 ? form.dataInicio + ':00' : form.dataInicio)
+  const dow = date.getDay()
+  if (dow === 0) return 'Domingo'
+  if (dow === 6) return 'Sábado'
+  return null
+})
+
 // Preenche o form quando o modal abre
 watch(() => props.open, (open) => {
   if (!open) {
@@ -280,6 +290,11 @@ function confirmSave() {
         :title="feriadoAlert.tipo === 'feriado' ? 'Feriado' : 'Ponto Facultativo'"
       >
         {{ feriadoAlert.titulo }} está registrado nesta data.
+      </AppAlert>
+
+      <!-- Alerta de final de semana -->
+      <AppAlert v-if="weekendAlert" variant="warning" title="Final de semana">
+        {{ weekendAlert }} — não é um dia útil. Confirme se é intencional.
       </AppAlert>
 
       <!-- Alerta de conflito CONFLITO-B (RN-008) — não bloqueante -->

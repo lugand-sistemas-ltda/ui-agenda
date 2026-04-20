@@ -41,13 +41,21 @@ function dayEventos(date: Date): Compromisso[] {
 function tipoCssKey(tipo: string): string {
   return tipo.replace(/_/g, '-')
 }
+
+function isWeekend(date: Date): boolean {
+  return date.getDay() === 0 || date.getDay() === 6
+}
 </script>
 
 <template>
   <div class="cal-month">
     <!-- Cabeçalho dos dias da semana -->
     <div class="cal-month__weekdays" aria-hidden="true">
-      <span v-for="d in DAYS_SHORT_BR" :key="d" class="cal-month__weekday">{{ d }}</span>
+      <span
+        v-for="(d, i) in DAYS_SHORT_BR"
+        :key="d"
+        :class="['cal-month__weekday', { 'cal-month__weekday--weekend': i === 0 || i === 6 }]"
+      >{{ d }}</span>
     </div>
 
     <!-- Grade de dias -->
@@ -59,6 +67,7 @@ function tipoCssKey(tipo: string): string {
           'cal-month__cell',
           { 'cal-month__cell--other-month': !isCurrentMonth(day, currentDate) },
           { 'cal-month__cell--today':       isToday(day) },
+          isWeekend(day) && !dayFundoDia(day) ? 'cal-month__cell--weekend' : '',
           dayFundoDia(day) ? `cal-month__cell--fundo-${tipoCssKey(dayFundoDia(day)!.tipo)}` : '',
         ]"
         :aria-label="`${day.getDate()}/${day.getMonth() + 1}/${day.getFullYear()}`"
@@ -101,15 +110,17 @@ function tipoCssKey(tipo: string): string {
     border-bottom: 1px solid var(--color-border);
   }
 
-  &__weekday {
-    padding: $spacing-2;
-    font-size: $font-size-xs;
-    font-weight: $font-weight-semibold;
-    color: var(--color-text-secondary);
-    text-align: center;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
+    &__weekday {
+      padding: $spacing-2;
+      font-size: $font-size-xs;
+      font-weight: $font-weight-semibold;
+      color: var(--color-text-secondary);
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+
+      &--weekend { color: var(--color-text-disabled); }
+    }
 
   &__grid {
     display: grid;
@@ -145,6 +156,13 @@ function tipoCssKey(tipo: string): string {
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+
+    &--weekend {
+      background-color: var(--color-off-hours-bg);
+      &:hover { filter: brightness(0.97); }
+
+      .cal-month__day-number { color: var(--color-text-secondary); }
     }
 
     // ADR-005 IA-005 / ADR-002 PA-011: fundo_dia preenche o fundo da célula

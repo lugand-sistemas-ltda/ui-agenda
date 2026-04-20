@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import type { Compromisso } from '../../../../types/agenda'
 import {
   MONTHS_SHORT_BR,
@@ -9,17 +9,41 @@ import {
 } from '../../../../utils/dateUtils'
 import CompromissoCard from '../CompromissoCard.vue'
 
-const DAYS_AHEAD = 60
-
 const props = defineProps<{
   currentDate: Date
   compromissos: Compromisso[]
+  /** Janela de dias a exibir — controlada externamente via loadMore (padrão 60) */
+  daysAhead:    number
+  /** Indica que novos dados estão sendo buscados — exibe spinner no fundo */
+  loadingMore:  boolean
 }>()
 
 const emit = defineEmits<{
   compromissoClick: [compromisso: Compromisso]
   slotClick:        [date: Date]
+  /** Disparado quando o usuário chegou ao fundo da lista */
+  loadMore:         []
 }>()
+
+// ---- Sentinela de scroll infinito ----
+const sentinel = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
+
+function setupObserver() {
+  if (observer) observer.disconnect()
+  observer = new IntersectionObserver(
+    ([entry]) => { if (entry.isIntersecting) emit('loadMore') },
+    { rootMargin: '120px' },
+  )
+  if (sentinel.value) observer.observe(sentinel.value)
+}
+
+onMounted(setupObserver)
+// Re-observar se o sentinela for recriado no DOM (ex.: troca de view)
+watch(sentinel, (el) => { if (el && observer) observer.observe(el) })
+onBeforeUnmount(() => observer?.disconnect())
+
+// ---- Grupos de dias ----
 
 interface DayGroup {
   date: Date
@@ -32,13 +56,16 @@ function tipoCssKey(tipo: string): string {
   return tipo.replace(/_/g, '-')
 }
 
+function isWeekend(date: Date): boolean {
+  return date.getDay() === 0 || date.getDay() === 6
+}
+
 const groups = computed<DayGroup[]>(() => {
   const from = new Date(props.currentDate)
   from.setHours(0, 0, 0, 0)
   const to = new Date(from)
-  to.setDate(to.getDate() + DAYS_AHEAD)
+  to.setDate(to.getDate() + props.daysAhead)
 
-  // Filtrar e ordenar
   const filtered = props.compromissos
     .filter(c => {
       const d = parseLocal(c.dataInicio)
@@ -46,18 +73,16 @@ const groups = computed<DayGroup[]>(() => {
     })
     .sort((a, b) => parseLocal(a.dataInicio).getTime() - parseLocal(b.dataInicio).getTime())
 
-  // Agrupar por dia
   const map = new Map<string, DayGroup>()
   for (const c of filtered) {
-    const d    = parseLocal(c.dataInicio)
-    const key  = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+    const d   = parseLocal(c.dataInicio)
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
     if (!map.has(key)) {
       const label = `${DAYS_FULL_BR[d.getDay()]}, ${d.getDate()} ${MONTHS_SHORT_BR[d.getMonth()]} ${d.getFullYear()}`
       map.set(key, { date: d, label, fundoDia: undefined, eventos: [] })
     }
     const group = map.get(key)!
     if (c.renderizacao === 'fundo_dia') {
-      // apenas um fundo_dia por dia — guarda o primeiro
       if (!group.fundoDia) group.fundoDia = c
     } else {
       group.eventos.push(c)
@@ -70,8 +95,8 @@ const groups = computed<DayGroup[]>(() => {
 
 <template>
   <div class="cal-agenda">
-    <div v-if="!groups.length" class="cal-agenda__empty">
-      Nenhum compromisso nos próximos {{ 60 }} dias.
+    <div v-if="!groups.length && !loadingMore" class="cal-agenda__empty">
+      Nenhum compromisso nos próximos {{ daysAhead }} dias.
     </div>
 
     <section
@@ -79,11 +104,12 @@ const groups = computed<DayGroup[]>(() => {
       :key="group.date.toISOString()"
       class="cal-agenda__group"
     >
-      <!-- ADR-005 IA-005: header colorido quando o dia tem fundo_dia -->
+      <!-- ADR-005 IA-005: header colorido quando o dia tem fundo_dia (ou fim de semana) -->
       <header
         :class="[
           'cal-agenda__date-header',
           group.fundoDia ? `cal-agenda__date-header--fundo-${tipoCssKey(group.fundoDia.tipo)}` : '',
+          !group.fundoDia && isWeekend(group.date) ? 'cal-agenda__date-header--weekend' : '',
         ]"
         @click="$emit('slotClick', group.date)"
       >
@@ -106,6 +132,11 @@ const groups = computed<DayGroup[]>(() => {
         </div>
       </div>
     </section>
+
+    <!-- Sentinela para IntersectionObserver + spinner de carregamento -->
+    <div ref="sentinel" class="cal-agenda__sentinel" aria-hidden="true">
+      <span v-if="loadingMore" class="cal-agenda__load-spinner" />
+    </div>
   </div>
 </template>
 
@@ -137,6 +168,13 @@ const groups = computed<DayGroup[]>(() => {
     cursor: pointer;
 
     // ADR-005 IA-005 / ADR-002 PA-011: header colorido para dias com fundo_dia
+    &--weekend {
+      background-color: var(--color-off-hours-bg);
+      border-bottom-color: var(--color-border);
+
+      .cal-agenda__date-label { color: var(--color-text-secondary); }
+    }
+
     @each $tipo in feriado, ponto-facultativo, recesso {
       &--fundo-#{$tipo} {
         background-color: var(--color-tipo-#{$tipo}-bg);
@@ -182,5 +220,27 @@ const groups = computed<DayGroup[]>(() => {
     min-width: 44px;
     padding-top: $spacing-2;
   }
+
+  &__sentinel {
+    height: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: $spacing-4 0;
+  }
+
+  &__load-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: $radius-full;
+    animation: cal-agenda-spin 0.7s linear infinite;
+  }
+}
+
+@keyframes cal-agenda-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

@@ -48,6 +48,10 @@ function dayKey(date: Date): string {
 function tipoCssKey(tipo: CompromissoTipo): string {
   return tipo.replace(/_/g, '-')
 }
+
+function isWeekend(date: Date): boolean {
+  return date.getDay() === 0 || date.getDay() === 6
+}
 </script>
 
 <template>
@@ -75,6 +79,10 @@ function tipoCssKey(tipo: CompromissoTipo): string {
               'cal-year__day',
               { 'cal-year__day--other-month': !isCurrentMonth(day, new Date(currentDate.getFullYear(), month)) },
               { 'cal-year__day--today': isToday(day) },
+              // Fim de semana (sem sobrepor fundo_dia)
+              isWeekend(day) && !dayMarkMap.get(dayKey(day))
+                ? 'cal-year__day--weekend'
+                : '',
               // ADR-005 IA-005: fundo_dia colore o fundo do dia como quadrado
               dayMarkMap.get(dayKey(day))?.renderizacao === 'fundo_dia'
                 ? `cal-year__day--fundo-${tipoCssKey(dayMarkMap.get(dayKey(day))!.tipo)}`
@@ -173,6 +181,12 @@ function tipoCssKey(tipo: CompromissoTipo): string {
       background-color: var(--color-accent);
       color: var(--color-accent-text);
       border-radius: $radius-full;
+    }
+
+    &--weekend {
+      background-color: var(--color-off-hours-bg);
+      border-radius: $radius-sm;
+      .cal-year__day-num { color: var(--color-text-secondary); }
     }
 
     // ADR-005 IA-005: fundo_dia colore o fundo do dia como quadrado colorido
