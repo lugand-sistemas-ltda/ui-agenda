@@ -32,7 +32,7 @@ const modalDefaultDate  = ref<Date | null>(null)
 
 // ---- Composable ----
 const { getByMonth, addCompromisso, updateCompromisso, removeCompromisso, fetchByMonth, loading, error } = useAgenda()
-const { agendas, selectedAgendaId, agendaAtiva, selecionarAgenda } = useSession()
+const { agendas, selectedAgendaId, agendaAtiva, selecionarAgenda, usuarioAtivoId } = useSession()
 const { success: toastSuccess, error: toastError } = useToast()
 
 // ---- Permissões: só a agenda pessoal permite criação nesta iteração ----
@@ -48,23 +48,23 @@ const agendaIdParaCriacao = computed<string | undefined>(() =>
 // ---- Carregamento de dados ----
 
 async function loadForCurrentView(): Promise<void> {
-  const d     = currentDate.value
-  const year  = d.getFullYear()
-  const month = d.getMonth()
-  const ids   = selectedAgendaId.value ? [selectedAgendaId.value] : undefined
+  const d      = currentDate.value
+  const year   = d.getFullYear()
+  const month  = d.getMonth()
+  const uid    = usuarioAtivoId.value ?? undefined
 
   if (currentView.value === 'ano') {
-    await Promise.all(Array.from({ length: 12 }, (_, m) => fetchByMonth(year, m, ids)))
+    await Promise.all(Array.from({ length: 12 }, (_, m) => fetchByMonth(year, m, uid)))
   } else if (currentView.value === 'agenda') {
     // Carrega tantos meses quantos forem necessários para cobrir agendaDaysAhead
     await Promise.all(
       Array.from({ length: agendaMonthCount.value }, (_, i) => {
         const nd = new Date(year, month + i, 1)
-        return fetchByMonth(nd.getFullYear(), nd.getMonth(), ids)
+        return fetchByMonth(nd.getFullYear(), nd.getMonth(), uid)
       }),
     )
   } else {
-    await fetchByMonth(year, month, ids)
+    await fetchByMonth(year, month, uid)
   }
 }
 
@@ -184,8 +184,8 @@ async function handleAgendaLoadMore(): Promise<void> {
     const nextOffset = agendaMonthCount.value
     agendaDaysAhead.value += AGENDA_DAYS_STEP
     const nd  = new Date(d.getFullYear(), d.getMonth() + nextOffset, 1)
-    const ids = selectedAgendaId.value ? [selectedAgendaId.value] : undefined
-    await fetchByMonth(nd.getFullYear(), nd.getMonth(), ids)
+    const uid = usuarioAtivoId.value ?? undefined
+    await fetchByMonth(nd.getFullYear(), nd.getMonth(), uid)
   } finally {
     agendaLoadingMore.value = false
   }

@@ -120,8 +120,8 @@ export const agendaService = {
 // =============================================================================
 
 export const compromissoService = {
-  /** Lista todos — ou filtra por ?ano&mes ou ?ano&mes&dia ou ?agendaId */
-  listar: (params?: { ano?: number; mes?: number; dia?: number; agendaId?: string }): Promise<CompromissoAPI[]> => {
+  /** Lista todos — ou filtra por ?usuarioId (VIS-004) ou ?agendaId; combinável com ?ano&mes ou ?ano&mes&dia */
+  listar: (params?: { ano?: number; mes?: number; dia?: number; agendaId?: string; usuarioId?: string }): Promise<CompromissoAPI[]> => {
     const qs = params ? new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v != null)

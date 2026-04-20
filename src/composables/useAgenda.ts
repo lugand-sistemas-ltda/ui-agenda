@@ -47,31 +47,22 @@ export function useAgenda() {
   /**
    * Busca os compromissos de um mês.
    *
-   * @param agendaIds  Se fornecido, busca apenas as agendas listadas (filtro de sessão).
-   *                   Se vazio, busca todos (comportamento sem sessão ativa).
+   * @param usuarioId  Se fornecido, aplica VIS-004 (ADR-007): retorna todos os itens
+   *                   visíveis para o usuário — pessoais, grupo, unidade e globais.
+   *                   Se omitido, busca sem filtro (sem sessão ativa).
    */
-  async function fetchByMonth(year: number, month: number, agendaIds?: string[]): Promise<void> {
+  async function fetchByMonth(year: number, month: number, usuarioId?: string): Promise<void> {
     loading.value = true
     error.value   = null
     try {
       let fetched: ReturnType<typeof fromAPI>[] = []
 
-      if (agendaIds && agendaIds.length > 0) {
-        // Busca paralela por cada agenda do usuário
-        const results = await Promise.all(
-          agendaIds.map(agendaId =>
-            compromissoService.listar({ ano: year, mes: month + 1, agendaId }),
-          ),
-        )
-        fetched = results.flat().map(fromAPI)
-        // Deduplica por id (itens de unidade podem repetir em cenários futuros)
-        const seen = new Set<string>()
-        fetched = fetched.filter(c => seen.has(c.id) ? false : (seen.add(c.id), true))
-      } else {
-        // Sem sessão — busca sem filtro de agenda
-        const data = await compromissoService.listar({ ano: year, mes: month + 1 })
-        fetched = data.map(fromAPI)
-      }
+      const params = usuarioId
+        ? { ano: year, mes: month + 1, usuarioId }
+        : { ano: year, mes: month + 1 }
+
+      const data = await compromissoService.listar(params)
+      fetched = data.map(fromAPI)
 
       // Mescla com o estado: remove os do mesmo mês e reinsere os novos
       compromissos.value = [
