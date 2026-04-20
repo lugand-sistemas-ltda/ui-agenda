@@ -25,6 +25,7 @@ const agendas          = ref<Agenda[]>([])
 const selectedAgendaId = ref<string | null>(null)
 const loadingSession   = ref(false)
 const errorSession     = ref<string | null>(null)
+const isAuthenticated  = ref<boolean>(!!localStorage.getItem(STORAGE_KEY))
 
 // =============================================================================
 // MAPEAMENTO API → domínio
@@ -99,9 +100,18 @@ export function useSession() {
 
   async function selecionarUsuario(id: string | null): Promise<void> {
     usuarioAtivoId.value   = id
+    isAuthenticated.value  = !!id
     agendas.value          = []
     selectedAgendaId.value = null   // será re-selecionado em _fetchAgendas
     if (id) await _fetchAgendas(id)
+  }
+
+  function logout(): void {
+    usuarioAtivoId.value   = null
+    isAuthenticated.value  = false
+    agendas.value          = []
+    selectedAgendaId.value = null
+    localStorage.removeItem(STORAGE_KEY)
   }
 
   function selecionarAgenda(id: string | null): void {
@@ -146,8 +156,10 @@ export function useSession() {
     papelNaUnidade,
     loadingSession:    readonly(loadingSession),
     errorSession:      readonly(errorSession),
+    isAuthenticated:   readonly(isAuthenticated),
     init,
     selecionarUsuario,
     selecionarAgenda,
+    logout,
   }
 }

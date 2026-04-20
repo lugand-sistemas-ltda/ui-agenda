@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useTheme } from '../../composables/useTheme'
 import { useSession } from '../../composables/useSession'
 import { PAPEL_LABELS } from '../../types/agenda'
@@ -7,10 +8,16 @@ import AppContainer from '../primitives/AppContainer.vue'
 import AppText from '../primitives/AppText.vue'
 import AppButton from '../primitives/AppButton.vue'
 
+const router = useRouter()
 const { theme, toggleTheme } = useTheme()
-const { usuarios, usuarioAtivo, papelNaUnidade, selecionarUsuario, init } = useSession()
+const { usuarioAtivo, papelNaUnidade, logout, init } = useSession()
 
 onMounted(init)
+
+function handleLogout(): void {
+  logout()
+  router.push('/login')
+}
 </script>
 
 <template>
@@ -23,22 +30,20 @@ onMounted(init)
 
       <!-- Ações do header -->
       <div class="app-header__actions">
-        <!-- Seletor de usuário ativo (login simples — Iteração 2) -->
+        <!-- Sessão: nome do usuário ativo + papel + sair -->
         <div class="app-header__session">
-          <select
-            class="app-header__user-select"
-            :value="usuarioAtivo?.id ?? ''"
-            :aria-label="'Usuário ativo'"
-            @change="e => selecionarUsuario((e.target as HTMLSelectElement).value || null)"
-          >
-            <option value="">— Selecionar usuário —</option>
-            <option v-for="u in usuarios" :key="u.id" :value="u.id">
-              {{ u.nome }}
-            </option>
-          </select>
+          <span class="app-header__username">{{ usuarioAtivo?.nome }}</span>
           <span v-if="papelNaUnidade" class="app-header__papel">
             {{ PAPEL_LABELS[papelNaUnidade as keyof typeof PAPEL_LABELS] ?? papelNaUnidade }}
           </span>
+          <AppButton
+            variant="ghost"
+            size="sm"
+            aria-label="Sair"
+            @click="handleLogout"
+          >
+            Sair
+          </AppButton>
         </div>
         <AppButton
           variant="icon"
@@ -123,19 +128,10 @@ onMounted(init)
     @include flex(row, center, flex-start, $spacing-2);
   }
 
-  &__user-select {
+  &__username {
     font-size: $font-size-sm;
-    font-weight: $font-weight-medium;
+    font-weight: $font-weight-semibold;
     color: var(--color-text-primary);
-    background-color: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
-    border-radius: $radius-md;
-    padding: $spacing-1 $spacing-3;
-    cursor: pointer;
-    outline: none;
-    transition: border-color $transition-fast;
-
-    &:focus-visible { border-color: var(--color-accent); }
   }
 
   &__papel {
