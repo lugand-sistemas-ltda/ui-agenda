@@ -257,7 +257,7 @@ $spin-speed:   0.9s;
 
   &__tagline {
     font-family:    $font-family-base;
-    font-size:      2.25rem;
+    font-size:      1.75rem;
     font-weight:    $font-weight-regular;
     color:          rgba(255, 255, 255, 0.30);
     letter-spacing: 0.04em;
@@ -265,7 +265,7 @@ $spin-speed:   0.9s;
     line-height:    $line-height-base;
     white-space:    nowrap;
     margin:         0;
-    margin-top:     calc(-1 * $spacing-3);
+    margin-top:     calc(-1 * $spacing-1);
   }
 
   &__loading-row {
