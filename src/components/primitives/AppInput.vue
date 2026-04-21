@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type InputType = 'text' | 'date' | 'time' | 'datetime-local' | 'email' | 'tel' | 'number'
+type InputType = 'text' | 'password' | 'date' | 'time' | 'datetime-local' | 'email' | 'tel' | 'number'
 
 const model = defineModel<string>()
 
@@ -16,6 +16,8 @@ withDefaults(defineProps<{
   disabled: false,
   readonly: false,
 })
+
+defineOptions({ inheritAttrs: false })
 </script>
 
 <template>
@@ -26,6 +28,7 @@ withDefaults(defineProps<{
     <input
       :id="id"
       v-model="model"
+      v-bind="$attrs"
       :type="type"
       :placeholder="placeholder"
       :disabled="disabled"

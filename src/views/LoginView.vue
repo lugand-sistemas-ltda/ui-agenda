@@ -1,65 +1,94 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSession } from '../composables/useSession'
 import { useTheme } from '../composables/useTheme'
 import AppButton from '../components/primitives/AppButton.vue'
+import AppInput from '../components/primitives/AppInput.vue'
 
 const router = useRouter()
 const { theme, toggleTheme } = useTheme()
-const { usuarios, usuarioAtivoId, loadingSession, errorSession, isAuthenticated, init, selecionarUsuario } = useSession()
+const { login, loadingSession, errorSession, isAuthenticated, init } = useSession()
 
-const selectedId = ref<string>(usuarioAtivoId.value ?? '')
+const matricula = ref('')
+const senha     = ref('')
+const localError = ref<string | null>(null)
 
-onMounted(init)
+onMounted(async () => {
+  await init()
+  // Se já há sessão válida no localStorage, redireciona direto
+  if (isAuthenticated.value) router.replace('/')
+})
 
 async function handleLogin(): Promise<void> {
-  if (!selectedId.value) return
-  await selecionarUsuario(selectedId.value)
-  router.push('/')
+  localError.value = null
+  if (!matricula.value.trim() || !senha.value) return
+  try {
+    await login(matricula.value.trim(), senha.value)
+    router.push('/')
+  } catch {
+    localError.value = 'Matrícula ou senha incorretos.'
+    senha.value = ''
+  }
 }
 </script>
 
 <template>
   <div class="login-view">
     <div class="login-view__card">
-      <!-- Cabeçalho da card -->
+      <!-- Logo -->
       <header class="login-view__header">
-        <h1 class="login-view__title">ui-agenda</h1>
-        <p class="login-view__subtitle">SRI — Módulo de Agendamento</p>
+        <img
+          src="/logo_pcpr.png"
+          alt="Polícia Civil do Paraná"
+          class="login-view__logo"
+          draggable="false"
+        />
+        <h1 class="login-view__title">SRI — Módulo de Agendamento</h1>
       </header>
 
-      <!-- Erro de carregamento -->
-      <p v-if="errorSession" class="login-view__error" role="alert">
-        {{ errorSession }}
+      <!-- Erro de autenticação -->
+      <p v-if="localError || errorSession" class="login-view__error" role="alert">
+        {{ localError ?? errorSession }}
       </p>
 
-      <!-- Formulário de seleção -->
-      <form class="login-view__form" @submit.prevent="handleLogin">
-        <label class="login-view__label" for="login-user-select">
-          Entrar como
-        </label>
+      <!-- Formulário de login -->
+      <form class="login-view__form" @submit.prevent="handleLogin" novalidate>
+        <div class="login-view__field">
+          <label class="login-view__label" for="login-matricula">Matrícula</label>
+          <AppInput
+            id="login-matricula"
+            v-model="matricula"
+            type="text"
+            inputmode="numeric"
+            placeholder="Ex.: 1000001"
+            autocomplete="username"
+            :disabled="loadingSession"
+            class="login-view__input"
+          />
+        </div>
 
-        <select
-          id="login-user-select"
-          v-model="selectedId"
-          class="login-view__select"
-          :disabled="loadingSession"
-        >
-          <option value="" disabled>— Selecionar usuário —</option>
-          <option v-for="u in usuarios" :key="u.id" :value="u.id">
-            {{ u.nome }}
-          </option>
-        </select>
+        <div class="login-view__field">
+          <label class="login-view__label" for="login-senha">Senha</label>
+          <AppInput
+            id="login-senha"
+            v-model="senha"
+            type="password"
+            placeholder="••••••••"
+            autocomplete="current-password"
+            :disabled="loadingSession"
+            class="login-view__input"
+          />
+        </div>
 
         <AppButton
           type="submit"
           variant="primary"
           size="md"
-          :disabled="!selectedId || loadingSession"
+          :disabled="!matricula.trim() || !senha || loadingSession"
           class="login-view__btn"
         >
-          {{ loadingSession ? 'Carregando…' : 'Entrar' }}
+          {{ loadingSession ? 'Entrando…' : 'Entrar' }}
         </AppButton>
       </form>
 
@@ -93,7 +122,7 @@ async function handleLogin(): Promise<void> {
     flex-direction: column;
     gap: $spacing-6;
     width: 100%;
-    max-width: 360px;
+    max-width: 380px;
     padding: $spacing-8;
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -102,37 +131,48 @@ async function handleLogin(): Promise<void> {
   }
 
   &__header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: $spacing-3;
     text-align: center;
   }
 
-  &__title {
-    margin: 0 0 $spacing-1;
-    font-size: $font-size-2xl;
-    font-weight: $font-weight-semibold;
-    color: var(--color-accent);
-    letter-spacing: -0.02em;
+  &__logo {
+    width: 80px;
+    height: auto;
+    object-fit: contain;
+    user-select: none;
   }
 
-  &__subtitle {
+  &__title {
     margin: 0;
-    font-size: $font-size-sm;
+    font-size: $font-size-base;
+    font-weight: $font-weight-semibold;
     color: var(--color-text-secondary);
+    letter-spacing: 0.01em;
   }
 
   &__error {
     margin: 0;
     padding: $spacing-3;
     font-size: $font-size-sm;
-    color: var(--color-error, #d32f2f);
-    background-color: color-mix(in srgb, var(--color-error, #d32f2f) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-error, #d32f2f) 30%, transparent);
+    color: var(--color-feedback-error, #d32f2f);
+    background-color: color-mix(in srgb, var(--color-feedback-error, #d32f2f) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-feedback-error, #d32f2f) 30%, transparent);
     border-radius: $radius-md;
   }
 
   &__form {
     display: flex;
     flex-direction: column;
-    gap: $spacing-3;
+    gap: $spacing-4;
+  }
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-1;
   }
 
   &__label {
@@ -141,25 +181,13 @@ async function handleLogin(): Promise<void> {
     color: var(--color-text-secondary);
   }
 
-  &__select {
+  &__input {
     width: 100%;
-    padding: $spacing-2 $spacing-3;
-    font-size: $font-size-base;
-    font-weight: $font-weight-medium;
-    color: var(--color-text-primary);
-    background-color: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
-    border-radius: $radius-md;
-    cursor: pointer;
-    outline: none;
-    transition: border-color $transition-fast;
-
-    &:focus-visible { border-color: var(--color-accent); }
-    &:disabled { opacity: 0.5; cursor: not-allowed; }
   }
 
   &__btn {
     width: 100%;
+    margin-top: $spacing-1;
   }
 
   &__footer {

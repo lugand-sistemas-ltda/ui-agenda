@@ -1,31 +1,37 @@
 /**
- * useSession — Iteração 2
+ * useSession — Iteração 2 (auth real)
  *
- * Gerencia o usuário ativo (login simples, sem autenticação).
- * O usuário selecionado é persistido em localStorage.
+ * Gerencia sessão de autenticação baseada em UUID opaco.
+ * O cliente armazena o sessionId em localStorage; o backend valida via
+ * GET /api/auth/me (X-Session-Id header) com expiração de 8 h.
  *
- * Ao montar, busca a lista de usuários da API e restaura a seleção anterior.
- * Expõe também as agendas consolidadas do usuário ativo (pessoal + unidade).
+ * Singleton: todas as refs vivem fora da função → estado compartilhado.
  */
 
-import { ref, computed, readonly, watch } from 'vue'
+import { ref, computed, readonly } from 'vue'
 import type { Agenda } from '../types/agenda'
-import type { UsuarioAPI, AgendaAPI } from '../services/agenda.service'
-import { usuarioService, agendaService } from '../services/agenda.service'
+import type { AuthLoginResponse, AgendaAPI } from '../services/agenda.service'
+import { authService, agendaService } from '../services/agenda.service'
 
 // =============================================================================
 // ESTADO SINGLETON
 // =============================================================================
 
-const STORAGE_KEY = 'sri-agenda:usuarioId'
+const SESSION_KEY = 'sri-agenda:sessionId'
 
-const usuarios         = ref<UsuarioAPI[]>([])
-const usuarioAtivoId   = ref<string | null>(localStorage.getItem(STORAGE_KEY))
-const agendas          = ref<Agenda[]>([])
+/** UUID de sessão opaco (token do backend). */
+const sessionId      = ref<string | null>(localStorage.getItem(SESSION_KEY))
+
+/** Dados do usuário autenticado — preenchidos após login ou validação. */
+const sessaoAtiva    = ref<AuthLoginResponse | null>(null)
+
+const agendas        = ref<Agenda[]>([])
 const selectedAgendaId = ref<string | null>(null)
-const loadingSession   = ref(false)
-const errorSession     = ref<string | null>(null)
-const isAuthenticated  = ref<boolean>(!!localStorage.getItem(STORAGE_KEY))
+const loadingSession = ref(false)
+const errorSession   = ref<string | null>(null)
+
+/** Verdadeiro somente após validação bem-sucedida com o backend. */
+const isAuthenticated = ref<boolean>(false)
 
 // =============================================================================
 // MAPEAMENTO API → domínio
@@ -49,45 +55,62 @@ function fromAgendaAPI(a: AgendaAPI): Agenda {
 
 export function useSession() {
 
-  // Persiste a seleção no localStorage
-  watch(usuarioAtivoId, (id) => {
-    if (id) localStorage.setItem(STORAGE_KEY, id)
-    else    localStorage.removeItem(STORAGE_KEY)
-  })
-
-  // --- Carregamento inicial ---------------------------------------------------
+  // --- Carregamento inicial (valida sessão salva) -----------------------------
 
   async function init(): Promise<void> {
-    if (usuarios.value.length > 0) return   // já carregado (singleton)
+    // Chamado em múltiplos componentes; executa a validação apenas uma vez.
+    if (isAuthenticated.value) return
+    if (!sessionId.value) {
+      isAuthenticated.value = false
+      return
+    }
     loadingSession.value = true
     errorSession.value   = null
     try {
-      usuarios.value = await usuarioService.listar()
-
-      // Valida se o usuário salvo ainda existe; se não, limpa
-      if (
-        usuarioAtivoId.value &&
-        !usuarios.value.find(u => u.id === usuarioAtivoId.value)
-      ) {
-        usuarioAtivoId.value = null
-      }
-
-      // Carrega agendas do usuário ativo (se houver)
-      if (usuarioAtivoId.value) {
-        await _fetchAgendas(usuarioAtivoId.value)
-      }
-    } catch (e) {
-      errorSession.value = String(e)
+      const dados = await authService.me(sessionId.value)
+      sessaoAtiva.value     = dados
+      isAuthenticated.value = true
+      await _fetchAgendas(dados.usuarioId)
+    } catch {
+      // Sessão expirada ou inválida — limpa localStorage
+      _clearSession()
     } finally {
       loadingSession.value = false
     }
   }
 
-  async function _fetchAgendas(id: string): Promise<void> {
+  // --- Login (chamado pela LoginView) ----------------------------------------
+
+  async function login(matricula: string, senha: string): Promise<void> {
+    loadingSession.value = true
+    errorSession.value   = null
     try {
-      const data = await agendaService.consolidada(id)
+      const dados = await authService.login(matricula, senha)
+      sessionId.value       = dados.sessionId
+      localStorage.setItem(SESSION_KEY, dados.sessionId)
+      sessaoAtiva.value     = dados
+      isAuthenticated.value = true
+      await _fetchAgendas(dados.usuarioId)
+    } finally {
+      loadingSession.value = false
+    }
+  }
+
+  // --- Logout ----------------------------------------------------------------
+
+  async function logout(): Promise<void> {
+    if (sessionId.value) {
+      try { await authService.logout(sessionId.value) } catch { /* ignora */ }
+    }
+    _clearSession()
+  }
+
+  // --- Agendas consolidadas --------------------------------------------------
+
+  async function _fetchAgendas(usuarioId: string): Promise<void> {
+    try {
+      const data = await agendaService.consolidada(usuarioId)
       agendas.value = data.map(fromAgendaAPI)
-      // Auto-seleciona a agenda pessoal do usuário como padrão
       const pessoal = agendas.value.find(a => a.tipo === 'pessoal')
       selectedAgendaId.value = pessoal?.id ?? agendas.value[0]?.id ?? null
     } catch {
@@ -96,49 +119,44 @@ export function useSession() {
     }
   }
 
-  // --- Seleção de usuário ----------------------------------------------------
-
-  async function selecionarUsuario(id: string | null): Promise<void> {
-    usuarioAtivoId.value   = id
-    isAuthenticated.value  = !!id
-    agendas.value          = []
-    selectedAgendaId.value = null   // será re-selecionado em _fetchAgendas
-    if (id) await _fetchAgendas(id)
-  }
-
-  function logout(): void {
-    usuarioAtivoId.value   = null
-    isAuthenticated.value  = false
-    agendas.value          = []
-    selectedAgendaId.value = null
-    localStorage.removeItem(STORAGE_KEY)
-  }
-
   function selecionarAgenda(id: string | null): void {
     selectedAgendaId.value = id
   }
 
-  // --- Derivados --------------------------------------------------------------
+  // --- Limpar estado ---------------------------------------------------------
 
-  const usuarioAtivo = computed(() =>
-    usuarios.value.find(u => u.id === usuarioAtivoId.value) ?? null,
+  function _clearSession(): void {
+    sessionId.value        = null
+    sessaoAtiva.value      = null
+    isAuthenticated.value  = false
+    agendas.value          = []
+    selectedAgendaId.value = null
+    localStorage.removeItem(SESSION_KEY)
+  }
+
+  // --- Derivados -------------------------------------------------------------
+
+  /** ID do usuário ativo — extraído da sessão validada. */
+  const usuarioAtivoId = computed<string | null>(
+    () => sessaoAtiva.value?.usuarioId ?? null,
   )
 
   /**
-   * IDs de todas as agendas consolidadas (para uso interno se necessário).
+   * Dados do usuário ativo (nome, email, matricula).
+   * Exposto para AppHeader e outros consumidores.
    */
-  const agendaIds = computed<string[]>(() =>
-    agendas.value.map(a => a.id),
-  )
+  const usuarioAtivo = computed(() => sessaoAtiva.value)
 
-  /** Agenda atualmente selecionada como filtro ativo do calendário. */
+  /** IDs de todas as agendas consolidadas. */
+  const agendaIds = computed<string[]>(() => agendas.value.map(a => a.id))
+
+  /** Agenda selecionada como filtro ativo do calendário. */
   const agendaAtiva = computed<Agenda | null>(
     () => agendas.value.find(a => a.id === selectedAgendaId.value) ?? null,
   )
 
   /**
-   * Papel do usuário na agenda da unidade (ou pessoal se não houver unidade).
-   * Usado para exibição no AppHeader.
+   * Papel do usuário na agenda de unidade (para AppHeader).
    */
   const papelNaUnidade = computed<string | null>(() => {
     const unidade = agendas.value.find(a => a.tipo === 'unidade')
@@ -146,9 +164,8 @@ export function useSession() {
   })
 
   return {
-    usuarios:          readonly(usuarios),
     usuarioAtivo,
-    usuarioAtivoId:    readonly(usuarioAtivoId),
+    usuarioAtivoId,
     agendas:           readonly(agendas),
     agendaIds,
     selectedAgendaId:  readonly(selectedAgendaId),
@@ -158,8 +175,8 @@ export function useSession() {
     errorSession:      readonly(errorSession),
     isAuthenticated:   readonly(isAuthenticated),
     init,
-    selecionarUsuario,
-    selecionarAgenda,
+    login,
     logout,
+    selecionarAgenda,
   }
 }

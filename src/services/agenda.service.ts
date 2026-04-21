@@ -15,6 +15,16 @@ export interface UsuarioAPI {
   id: string
   nome: string
   email: string
+  matricula: string
+}
+
+// ---- Auth (Iteração 2) ----
+export interface AuthLoginResponse {
+  sessionId: string
+  usuarioId: string
+  nome:      string
+  email:     string
+  matricula: string
 }
 
 // ---- Agenda (Iteração 2) ----
@@ -80,6 +90,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
+}
+
+// =============================================================================
+// AUTENTICAÇÃO
+// =============================================================================
+
+export const authService = {
+  login: (matricula: string, senha: string): Promise<AuthLoginResponse> =>
+    request('/api/auth/login', {
+      method:  'POST',
+      body:    JSON.stringify({ matricula, senha }),
+    }),
+
+  /** Valida a sessão e retorna dados do usuário. Lança erro se expirada/inválida. */
+  me: (sessionId: string): Promise<AuthLoginResponse> =>
+    request('/api/auth/me', {
+      headers: { 'X-Session-Id': sessionId },
+    }),
+
+  logout: (sessionId: string): Promise<void> =>
+    request('/api/auth/logout', {
+      method:  'POST',
+      headers: { 'X-Session-Id': sessionId },
+    }),
 }
 
 // =============================================================================

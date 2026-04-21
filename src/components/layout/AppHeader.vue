@@ -14,8 +14,8 @@ const { usuarioAtivo, papelNaUnidade, logout, init } = useSession()
 
 onMounted(init)
 
-function handleLogout(): void {
-  logout()
+async function handleLogout(): Promise<void> {
+  await logout()
   router.push('/login')
 }
 </script>
