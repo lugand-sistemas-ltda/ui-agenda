@@ -150,9 +150,33 @@ export function useSession() {
   /** IDs de todas as agendas consolidadas. */
   const agendaIds = computed<string[]>(() => agendas.value.map(a => a.id))
 
+  /**
+   * Papel do usuário autenticado — vem diretamente do backend (grupo_membro).
+   * Ex.: 'gestor', 'estagiario', 'secretaria', 'operador', 'administrador'.
+   */
+  const papelAtivo = computed<string | null>(() => sessaoAtiva.value?.papel ?? null)
+
   /** Agenda selecionada como filtro ativo do calendário. */
   const agendaAtiva = computed<Agenda | null>(
     () => agendas.value.find(a => a.id === selectedAgendaId.value) ?? null,
+  )
+
+  /**
+   * ID do grupo ao qual o usuário pertence — extraído da agenda de unidade consolidada.
+   * As agendas pessoais não têm grupoId (campo `grupo` é nulo), então usamos a unidade.
+   * Usado para filtrar a lista de usuários no modal (escopo correto de unidade).
+   */
+  const grupoIdAtivo = computed<string | null>(() => {
+    const unidade = agendas.value.find(a => a.tipo === 'unidade' && a.grupoId)
+    return unidade?.grupoId ?? null
+  })
+
+  /**
+   * ID da agenda pessoal do usuário logado.
+   * Usado para garantir que itens privados sejam criados na agenda pessoal.
+   */
+  const agendaPessoalId = computed<string | null>(() =>
+    agendas.value.find(a => a.tipo === 'pessoal')?.id ?? null,
   )
 
   /**
@@ -170,6 +194,9 @@ export function useSession() {
     agendaIds,
     selectedAgendaId:  readonly(selectedAgendaId),
     agendaAtiva,
+    grupoIdAtivo,
+    agendaPessoalId,
+    papelAtivo,
     papelNaUnidade,
     loadingSession:    readonly(loadingSession),
     errorSession:      readonly(errorSession),

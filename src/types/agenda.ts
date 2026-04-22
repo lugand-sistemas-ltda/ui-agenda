@@ -19,6 +19,8 @@ export type CompromissoTipo =
 
 export type CompromissoStatus = 'confirmado' | 'pendente' | 'cancelado'
 
+export type ItemVisibilidade = 'privado' | 'grupo' | 'unidade' | 'global' | 'selecionado' | 'participante'
+
 export type CalendarViewType = 'mes' | 'semana' | 'dia' | 'agenda' | 'ano'
 
 // =============================================================================
@@ -55,6 +57,8 @@ export interface Compromisso {
   observacoes?: string
   agendaId?: string
   itemPaiId?: string
+  /** Visibilidade do item (ADR-007 VIS-002). Default: 'privado'. */
+  visibilidade?: ItemVisibilidade
 }
 
 export type CompromissoPayload = Omit<Compromisso, 'id'>
@@ -118,6 +122,50 @@ export const TIPO_AGENDA_LABELS: Record<TipoAgenda, string> = {
   grupo:    'Grupo',
   unidade:  'Unidade',
   sistema:  'Sistema',
+}
+
+export const VISIBILIDADE_LABELS: Record<ItemVisibilidade, string> = {
+  privado:      'Privado (somente minha agenda)',
+  participante: 'Responsáveis (apenas para responsáveis)',
+  grupo:        'Grupo (membros do grupo)',
+  unidade:      'Unidade (toda a unidade)',
+  global:       'Global (todo o sistema)',
+  selecionado:  'Selecionado (grupos específicos)',
+}
+
+/**
+ * Quais opções de visibilidade cada papel pode definir (ADR-009 PM-002).
+ * Indexado por `${papel}:${tipoAgenda}` para agendas não-pessoais,
+ * e por `${papel}` como fallback para agendas pessoais.
+ */
+export const VISIBILIDADE_POR_PAPEL: Record<string, ItemVisibilidade[]> = {
+  // Agenda PESSOAL — permite privado e participante
+  'administrador:pessoal': ['privado', 'participante', 'grupo', 'unidade', 'global', 'selecionado'],
+  'gestor:pessoal':        ['privado', 'participante', 'grupo', 'unidade', 'selecionado'],
+  'secretaria:pessoal':    ['privado', 'participante', 'grupo'],
+  'operador:pessoal':      ['privado', 'participante'],
+  'estagiario:pessoal':    ['privado', 'participante'],
+
+  // Agenda de UNIDADE / GRUPO — privado não faz sentido; usa participante no lugar
+  'administrador:unidade': ['participante', 'grupo', 'unidade', 'global', 'selecionado'],
+  'gestor:unidade':        ['participante', 'grupo', 'unidade', 'selecionado'],
+  'secretaria:unidade':    ['participante', 'grupo'],
+  'operador:unidade':      ['participante'],
+  'estagiario:unidade':    ['participante'],
+
+  // Agenda de GRUPO (mesma lógica que unidade)
+  'administrador:grupo':   ['participante', 'grupo', 'unidade', 'global', 'selecionado'],
+  'gestor:grupo':          ['participante', 'grupo', 'unidade', 'selecionado'],
+  'secretaria:grupo':      ['participante', 'grupo'],
+  'operador:grupo':        ['participante'],
+  'estagiario:grupo':      ['participante'],
+
+  // Fallback legado (sem tipo de agenda)
+  administrador: ['privado', 'participante', 'grupo', 'unidade', 'global', 'selecionado'],
+  gestor:        ['privado', 'participante', 'grupo', 'unidade', 'selecionado'],
+  secretaria:    ['privado', 'participante', 'grupo'],
+  operador:      ['privado', 'participante'],
+  estagiario:    ['privado', 'participante'],
 }
 
 export const VIEW_LABELS: Record<CalendarViewType, string> = {

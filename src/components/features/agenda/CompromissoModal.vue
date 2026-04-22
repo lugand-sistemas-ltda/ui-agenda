@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { reactive, ref, watch, computed, onMounted } from 'vue'
-import type { Compromisso, CompromissoPayload, CompromissoTipo, CompromissoStatus } from '../../../types/agenda'
-import { TIPO_LABELS, STATUS_LABELS } from '../../../types/agenda'
+import { reactive, ref, watch, computed } from 'vue'
+import type { Compromisso, CompromissoPayload, CompromissoTipo, CompromissoStatus, ItemVisibilidade } from '../../../types/agenda'
+import { TIPO_LABELS, STATUS_LABELS, VISIBILIDADE_LABELS, VISIBILIDADE_POR_PAPEL } from '../../../types/agenda'
 import type { SelectOption } from '../../primitives/AppSelect.vue'
 import AppModal from '../../primitives/AppModal.vue'
 import AppInput from '../../primitives/AppInput.vue'
@@ -10,8 +10,9 @@ import AppTextarea from '../../primitives/AppTextarea.vue'
 import AppButton from '../../primitives/AppButton.vue'
 import AppText from '../../primitives/AppText.vue'
 import AppAlert from '../../primitives/AppAlert.vue'
-import { toDatetimeLocal, fromDatetimeLocal, addDays, parseLocal } from '../../../utils/dateUtils'
+import { toDatetimeLocal, fromDatetimeLocal, parseLocal } from '../../../utils/dateUtils'
 import { useAgenda } from '../../../composables/useAgenda'
+import { useSession } from '../../../composables/useSession'
 import type { UsuarioAPI } from '../../../services/agenda.service'
 import { usuarioService, compromissoService } from '../../../services/agenda.service'
 
@@ -23,12 +24,15 @@ const props = withDefaults(defineProps<{
   defaultDate?: Date | null
   /** ID da agenda que receberá o item criado (agenda pessoal ativa) */
   agendaId?: string | null
+  /** Tipo da agenda ativa: determina quais visibilidades estão disponíveis */
+  agendaTipo?: string | null
   /** Quando false, o modal é somente leitura para criação (ex.: agenda da unidade) */
   canCreate?: boolean
 }>(), {
   compromisso: null,
   defaultDate: null,
   agendaId:    null,
+  agendaTipo:  null,
   canCreate:   true,
 })
 
@@ -50,21 +54,60 @@ const statusOptions: SelectOption[] = (Object.keys(STATUS_LABELS) as Compromisso
   label: STATUS_LABELS[k],
 }))
 
+// ---- Controle de papel (RN-004 / RN-010) ----
+
+const { papelAtivo, usuarioAtivoId, usuarioAtivo, grupoIdAtivo } = useSession()
+
 // ---- Usuários da API ----
+// Re-busca sempre que o grupo ativo mudar (agenda pessoal tem grupoId=null,
+// por isso usamos grupoIdAtivo derivado da agenda de unidade).
 
 const usuarios = ref<UsuarioAPI[]>([])
 
-onMounted(async () => {
+watch(grupoIdAtivo, async (grupoId) => {
   try {
-    usuarios.value = await usuarioService.listar()
+    usuarios.value = await usuarioService.listar(grupoId ? { grupoId } : undefined)
   } catch {
     // silencioso — o select ficará vazio e o campo ficará inválido na validação
   }
-})
+}, { immediate: true })
 
 const usuarioOptions = computed<SelectOption[]>(() =>
   usuarios.value.map(u => ({ value: u.id, label: u.nome })),
 )
+
+/** Operador cria compromissos apenas para si mesmo. */
+const somenteProprioResponsavel = computed(() => papelAtivo.value === 'operador')
+
+/** Estagiário aparece como delegado — deve escolher outro usuário como responsável. */
+const deveDelegar = computed(() => papelAtivo.value === 'estagiario')
+
+/**
+ * Opções do select de responsável filtradas pelo papel ativo (RN-004 / RN-010).
+ * - operador     → apenas o próprio usuário
+ * - estagiario   → todos exceto o próprio usuário
+ * - outros papéis → todos os usuários
+ */
+const responsavelOptions = computed<SelectOption[]>(() => {
+  if (somenteProprioResponsavel.value) {
+    const self = usuarios.value.find(u => u.id === usuarioAtivoId.value)
+    return self ? [{ value: self.id, label: self.nome }] : []
+  }
+  if (deveDelegar.value) {
+    return usuarios.value
+      .filter(u => u.id !== usuarioAtivoId.value)
+      .map(u => ({ value: u.id, label: u.nome }))
+  }
+  return usuarioOptions.value
+})
+
+/** Opções de visibilidade disponíveis para o papel ativo + tipo de agenda (ADR-009 PM-002). */
+const visibilidadeOptions = computed<SelectOption[]>(() => {
+  const tipo   = props.agendaTipo ?? 'pessoal'
+  const chave  = `${papelAtivo.value ?? ''}:${tipo}`
+  const opcoes = VISIBILIDADE_POR_PAPEL[chave] ?? VISIBILIDADE_POR_PAPEL[papelAtivo.value ?? ''] ?? ['privado']
+  return opcoes.map((v: ItemVisibilidade) => ({ value: v, label: VISIBILIDADE_LABELS[v] }))
+})
 
 // ---- Estado do formulário ----
 
@@ -76,6 +119,7 @@ function defaultForm() {
     descricao:     '',
     tipo:          'livre' as CompromissoTipo,
     status:        'pendente' as CompromissoStatus,
+    visibilidade:  'privado' as ItemVisibilidade,
     dataInicio:    toDatetimeLocal(base),
     dataFim:       toDatetimeLocal(fim),
     responsavelId: '' as string,
@@ -135,6 +179,7 @@ watch(() => props.open, (open) => {
       descricao:     c.descricao ?? '',
       tipo:          c.tipo,
       status:        c.status,
+      visibilidade:  (c.visibilidade ?? 'privado') as ItemVisibilidade,
       dataInicio:    toDatetimeLocal(parseLocal(c.dataInicio)),
       dataFim:       toDatetimeLocal(parseLocal(c.dataFim)),
       responsavelId: c.responsavel?.id ?? '',
@@ -144,6 +189,10 @@ watch(() => props.open, (open) => {
     })
   } else {
     Object.assign(form, defaultForm())
+    // Operador: responsável pré-fixado ao próprio usuário (RN-004)
+    if (somenteProprioResponsavel.value && usuarioAtivoId.value) {
+      form.responsavelId = usuarioAtivoId.value
+    }
   }
 }, { immediate: true })
 
@@ -222,6 +271,7 @@ async function handleSubmit() {
     descricao:         form.descricao.trim() || undefined,
     tipo:              form.tipo,
     status:            form.status,
+    visibilidade:      form.visibilidade,
     renderizacao:      'evento',
     exigePresenca:     false,
     dataInicio:        fromDatetimeLocal(form.dataInicio),
@@ -342,18 +392,40 @@ function confirmSave() {
         label="Status"
       />
 
-      <!-- Responsável -->
+      <!-- Visibilidade (ADR-007 VIS-002 / ADR-009 PM-002) — opções filtradas por papel -->
       <AppSelect
-        id="responsavel"
-        v-model="form.responsavelId"
-        :options="usuarioOptions"
-        label="Responsável"
-        placeholder="Selecione o responsável"
-        :error="errors.responsavelId"
+        id="visibilidade"
+        v-model="form.visibilidade"
+        :options="visibilidadeOptions"
+        label="Visibilidade"
       />
 
-      <!-- Outros responsáveis -->
-      <div class="comp-modal__outros">
+      <!-- Responsável (RN-004 / RN-010) -->
+      <div class="comp-modal__responsavel">
+        <AppAlert v-if="somenteProprioResponsavel" variant="info">
+          Como <strong>operador</strong>, você cria compromissos apenas para você mesmo.
+        </AppAlert>
+        <AppAlert v-else-if="deveDelegar" variant="info">
+          Como <strong>estagiário</strong>, você será registrado como delegado — selecione o responsável pelo compromisso.
+        </AppAlert>
+
+        <div v-if="somenteProprioResponsavel" class="comp-modal__field-readonly">
+          <AppText tag="span" size="sm" weight="medium" class="comp-modal__field-label">Responsável</AppText>
+          <AppText tag="span">{{ usuarioAtivo?.nome ?? '—' }}</AppText>
+        </div>
+        <AppSelect
+          v-else
+          id="responsavel"
+          v-model="form.responsavelId"
+          :options="responsavelOptions"
+          label="Responsável"
+          placeholder="Selecione o responsável"
+          :error="errors.responsavelId"
+        />
+      </div>
+
+      <!-- Outros responsáveis: indisponível para operador (cria apenas para si) -->
+      <div v-if="!somenteProprioResponsavel" class="comp-modal__outros">
         <div class="comp-modal__outros-header">
           <AppText tag="span" size="sm" weight="medium">Outros responsáveis</AppText>
           <AppButton variant="ghost" size="sm" type="button" @click="addOutro">
@@ -499,6 +571,27 @@ function confirmSave() {
 .comp-modal__outro-row {
   @include flex(row, flex-start, flex-start, $spacing-2);
   :deep(.app-input) { flex: 1; }
+}
+
+// Campo de responsável — agrupa alerta informativo + select ou exibição estática
+.comp-modal__responsavel {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+}
+
+// Exibição estática de campo bloqueado (ex.: responsável fixo para operador)
+.comp-modal__field-readonly {
+  @include flex(column, flex-start, flex-start, $spacing-1);
+  padding: $spacing-2 $spacing-3;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: $radius-md;
+}
+
+.comp-modal__field-label {
+  color: var(--color-text-secondary);
+  font-size: $font-size-sm;
 }
 
 // Botões de ação do footer — empurra para a direita

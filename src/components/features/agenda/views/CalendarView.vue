@@ -32,7 +32,7 @@ const modalDefaultDate  = ref<Date | null>(null)
 
 // ---- Composable ----
 const { getByMonth, addCompromisso, updateCompromisso, removeCompromisso, fetchByMonth, loading, error } = useAgenda()
-const { agendas, selectedAgendaId, agendaAtiva, selecionarAgenda, usuarioAtivoId } = useSession()
+const { agendas, selectedAgendaId, agendaAtiva, selecionarAgenda, usuarioAtivoId, agendaPessoalId } = useSession()
 const { success: toastSuccess, error: toastError } = useToast()
 
 // ---- Permissões: só a agenda pessoal permite criação nesta iteração ----
@@ -40,10 +40,14 @@ const canCreate = computed(() =>
   agendaAtiva.value === null || agendaAtiva.value.tipo === 'pessoal',
 )
 
-// ID da agenda que receberá itens criados (sempre a pessoal)
-const agendaIdParaCriacao = computed<string | undefined>(() =>
-  agendaAtiva.value?.tipo === 'pessoal' ? agendaAtiva.value.id : undefined,
-)
+// ID da agenda que receberá itens criados: preferência pela agenda pessoal.
+// Quando nenhuma agenda está selecionada, usa a pessoal do usuário como destino
+// padrão — evita que itens caiam na agenda da unidade por engano.
+const agendaIdParaCriacao = computed<string | undefined>(() => {
+  if (agendaAtiva.value?.tipo === 'pessoal') return agendaAtiva.value.id
+  if (agendaAtiva.value === null) return agendaPessoalId.value ?? undefined
+  return undefined
+})
 
 // ---- Carregamento de dados ----
 
@@ -78,15 +82,41 @@ watch([currentDate, currentView], (_, [, prevView]) => {
 watch(selectedAgendaId, () => { loadForCurrentView() })
 
 // ---- Compromissos filtrados para a view atual ----
+
+/**
+ * Filtra itens pelo contexto da agenda ativa.
+ *
+ * Agenda pessoal (ou sem seleção): mostra tudo que é visível ao usuário.
+ * Agenda de unidade/grupo/sistema: mostra apenas itens desta agenda mais itens
+ * com visibilidade ampla (global, unidade, grupo).
+ * Itens 'privado' e 'participante' são escopos pessoais/nominais —
+ * não aparecem na view da unidade (pertencem à agenda pessoal ou são
+ * visíveis somente para os próprios participantes).
+ */
+function filtrarPorAgenda(items: Compromisso[]): Compromisso[] {
+  const agenda = agendaAtiva.value
+  if (!agenda || agenda.tipo === 'pessoal') return items
+  return items.filter(c =>
+    c.agendaId === agenda.id ||
+    c.visibilidade === 'global' ||
+    c.visibilidade === 'unidade' ||
+    c.visibilidade === 'grupo' ||
+    // participante: se o backend retornou o item, o usuário já é participante.
+    // Deve aparecer em qualquer view — não apenas na pessoal.
+    c.visibilidade === 'participante',
+  )
+}
+
 const viewCompromissos = computed(() => {
   const d = currentDate.value
+  let items: Compromisso[]
   switch (currentView.value) {
     case 'mes':
-      return getByMonth(d.getFullYear(), d.getMonth())
     case 'semana':
     case 'dia':
-      // As views filtram internamente por dia; passamos todos do mês para eficiência
-      return getByMonth(d.getFullYear(), d.getMonth())
+      // semana e dia filtram internamente por dia; passamos todos do mês
+      items = getByMonth(d.getFullYear(), d.getMonth())
+      break
     case 'agenda': {
       // Fornece dados de todos os meses já carregados para a janela de paginação
       const months: Compromisso[] = []
@@ -94,17 +124,20 @@ const viewCompromissos = computed(() => {
         const nd = new Date(d.getFullYear(), d.getMonth() + i, 1)
         months.push(...getByMonth(nd.getFullYear(), nd.getMonth()))
       }
-      return months
+      items = months
+      break
     }
     case 'ano': {
       // Todos os compromissos do ano
-      const all = []
+      const all: Compromisso[] = []
       for (let m = 0; m < 12; m++) all.push(...getByMonth(d.getFullYear(), m))
-      return all
+      items = all
+      break
     }
     default:
-      return []
+      items = []
   }
+  return filtrarPorAgenda(items)
 })
 
 // ---- Navegação ----
@@ -274,6 +307,7 @@ function handleSlotClick(date: Date) {
       :compromisso="editingCompromisso"
       :default-date="modalDefaultDate"
       :agenda-id="agendaIdParaCriacao"
+      :agenda-tipo="agendaAtiva?.tipo ?? null"
       :can-create="canCreate"
       @close="closeModal"
       @save="handleSave"

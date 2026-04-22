@@ -1,5 +1,5 @@
 import { ref, readonly, computed } from 'vue'
-import type { Compromisso, CompromissoPayload } from '../types/agenda'
+import type { Compromisso, CompromissoPayload, ItemVisibilidade } from '../types/agenda'
 import type { CompromissoAPI } from '../services/agenda.service'
 import { compromissoService } from '../services/agenda.service'
 import { isSameDay, parseLocal } from '../utils/dateUtils'
@@ -33,6 +33,7 @@ function fromAPI(c: CompromissoAPI): Compromisso {
     outrosResponsaveis: c.outrosResponsaveis.map(r => ({ id: r.id, nome: r.nome })),
     agendaId:       c.agendaId,
     itemPaiId:      c.itemPaiId,
+    visibilidade:   (c.visibilidade as ItemVisibilidade) ?? 'privado',
   }
 }
 
@@ -93,6 +94,8 @@ export function useAgenda() {
       observacoes:         payload.observacoes,
       responsavelId:       payload.responsavel?.id,
       outrosResponsaveisIds: payload.outrosResponsaveis.map(r => r.id),
+      agendaId:            payload.agendaId,
+      visibilidade:        payload.visibilidade,
     })
     const compromisso = fromAPI(created)
     compromissos.value.push(compromisso)
@@ -111,6 +114,8 @@ export function useAgenda() {
       observacoes:         payload.observacoes,
       responsavelId:       payload.responsavel?.id,
       outrosResponsaveisIds: payload.outrosResponsaveis?.map(r => r.id),
+      agendaId:            payload.agendaId,
+      visibilidade:        payload.visibilidade,
     })
     const idx = compromissos.value.findIndex(c => c.id === id)
     if (idx !== -1) compromissos.value[idx] = fromAPI(updated)

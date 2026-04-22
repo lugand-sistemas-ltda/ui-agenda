@@ -16,6 +16,7 @@ export interface UsuarioAPI {
   nome: string
   email: string
   matricula: string
+  grupoId?: string
 }
 
 // ---- Auth (Iteração 2) ----
@@ -25,6 +26,7 @@ export interface AuthLoginResponse {
   nome:      string
   email:     string
   matricula: string
+  papel:     string | null
 }
 
 // ---- Agenda (Iteração 2) ----
@@ -54,6 +56,7 @@ export interface CompromissoAPI {
   outrosResponsaveis: UsuarioAPI[]
   agendaId?: string
   itemPaiId?: string
+  visibilidade?: string
   criadoEm: string
   atualizadoEm: string
 }
@@ -73,15 +76,25 @@ export interface CompromissoPayloadAPI {
   outrosResponsaveisIds?: string[]
   agendaId?: string
   itemPaiId?: string
+  visibilidade?: string
 }
 
 // =============================================================================
 // UTILITÁRIO INTERNO
 // =============================================================================
 
+const SESSION_STORAGE_KEY = 'sri-agenda:sessionId'
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // Inclui X-Session-Id automaticamente quando há sessão ativa, sem exigir que
+  // cada chamador conheça o localStorage. Chamadas de auth que já enviam o header
+  // explicitamente via init?.headers têm prioridade (spread posterior).
+  const storedSession = localStorage.getItem(SESSION_STORAGE_KEY)
+  const autoSessionHeader: Record<string, string> = storedSession
+    ? { 'X-Session-Id': storedSession }
+    : {}
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: { 'Content-Type': 'application/json', ...autoSessionHeader, ...init?.headers },
     ...init,
   })
   if (!res.ok) {
@@ -121,8 +134,10 @@ export const authService = {
 // =============================================================================
 
 export const usuarioService = {
-  listar: (): Promise<UsuarioAPI[]> =>
-    request('/api/usuarios'),
+  listar: (params?: { grupoId?: string }): Promise<UsuarioAPI[]> => {
+    const qs = params?.grupoId ? `?grupoId=${params.grupoId}` : ''
+    return request(`/api/usuarios${qs}`)
+  },
 
   buscar: (id: string): Promise<UsuarioAPI> =>
     request(`/api/usuarios/${id}`),
