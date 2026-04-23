@@ -36,6 +36,7 @@ const grupos = computed(() => {
 
 function handleChange(event: Event) {
   const id = (event.target as HTMLSelectElement).value
+  emit('select', id)
 }
 </script>
 
