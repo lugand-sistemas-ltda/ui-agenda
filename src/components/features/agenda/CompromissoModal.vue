@@ -28,12 +28,15 @@ const props = withDefaults(defineProps<{
   agendaTipo?: string | null
   /** Quando false, o modal é somente leitura para criação (ex.: agenda da unidade) */
   canCreate?: boolean
+  /** Mensagem de erro de salvamento retornada pelo backend (401/403/5xx). null = sem erro. */
+  saveError?: string | null
 }>(), {
   compromisso: null,
   defaultDate: null,
   agendaId:    null,
   agendaTipo:  null,
   canCreate:   true,
+  saveError:   null,
 })
 
 const emit = defineEmits<{
@@ -473,6 +476,11 @@ function confirmSave() {
         placeholder="Observações adicionais (opcional)"
         :rows="3"
       />
+
+      <!-- Erro de salvamento (retornado pelo backend: 401/403/5xx) -->
+      <AppAlert v-if="saveError" variant="error" title="Não foi possível salvar">
+        {{ saveError }}
+      </AppAlert>
     </div>
     </form>
 

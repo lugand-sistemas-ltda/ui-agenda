@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import type { Compromisso, CalendarViewType, CompromissoPayload } from '../../../../types/agenda'
 import { addDays, addWeeks, addMonths, addYears } from '../../../../utils/dateUtils'
 import { useAgenda } from '../../../../composables/useAgenda'
 import { useSession } from '../../../../composables/useSession'
 import { useToast } from '../../../../composables/useToast'
+import { ApiError } from '../../../../services/agenda.service'
 import CalendarHeader  from '../CalendarHeader.vue'
 import AppAlert        from '../../../primitives/AppAlert.vue'
 import AgendaFilter    from '../AgendaFilter.vue'
@@ -32,8 +34,10 @@ const modalDefaultDate  = ref<Date | null>(null)
 
 // ---- Composable ----
 const { getByMonth, addCompromisso, updateCompromisso, removeCompromisso, fetchByMonth, loading, error } = useAgenda()
-const { agendas, selectedAgendaId, agendaAtiva, selecionarAgenda, usuarioAtivoId, agendaPessoalId } = useSession()
+const { agendas, selectedAgendaId, agendaAtiva, selecionarAgenda, usuarioAtivoId, agendaPessoalId, logout } = useSession()
 const { success: toastSuccess, error: toastError } = useToast()
+const router         = useRouter()
+const modalSaveError = ref<string | null>(null)
 
 // ---- Permissões: só a agenda pessoal permite criação nesta iteração ----
 const canCreate = computed(() =>
@@ -73,7 +77,7 @@ async function loadForCurrentView(): Promise<void> {
 }
 
 onMounted(loadForCurrentView)
-watch([currentDate, currentView], (_, [, prevView]) => {
+watch([currentDate, currentView], () => {
   // Ao navegar dentro da view agenda, reseta a janela de paginação
   if (currentView.value === 'agenda') agendaDaysAhead.value = AGENDA_DAYS_INITIAL
   loadForCurrentView()
@@ -179,10 +183,12 @@ function openEditModal(compromisso: Compromisso) {
 }
 
 function closeModal() {
-  modalOpen.value = false
+  modalOpen.value      = false
+  modalSaveError.value = null
 }
 
 async function handleSave(payload: CompromissoPayload, id?: string) {
+  modalSaveError.value = null
   try {
     if (id) {
       await updateCompromisso(id, payload)
@@ -192,8 +198,22 @@ async function handleSave(payload: CompromissoPayload, id?: string) {
       toastSuccess('Compromisso criado com sucesso.')
     }
     closeModal()
-  } catch {
-    toastError('Não foi possível salvar o compromisso.', 'Erro ao salvar')
+  } catch (e) {
+    if (e instanceof ApiError) {
+      if (e.status === 401) {
+        modalSaveError.value = 'Sua sessão expirou. Você será redirecionado para o login.'
+        await logout()
+        setTimeout(() => router.push('/login'), 1500)
+      } else if (e.status === 403) {
+        modalSaveError.value = 'Você não tem permissão para realizar esta operação. Verifique seu papel na unidade.'
+      } else {
+        modalSaveError.value = 'Não foi possível salvar o compromisso. Tente novamente.'
+        toastError('Não foi possível salvar o compromisso.', 'Erro ao salvar')
+      }
+    } else {
+      modalSaveError.value = 'Erro de conexão. Verifique a rede e tente novamente.'
+      toastError('Erro de conexão com o servidor.', 'Erro ao salvar')
+    }
   }
 }
 
@@ -202,8 +222,20 @@ async function handleDelete(id: string) {
     await removeCompromisso(id)
     closeModal()
     toastSuccess('Compromisso excluído com sucesso.')
-  } catch {
-    toastError('Não foi possível excluir o compromisso.', 'Erro ao excluir')
+  } catch (e) {
+    if (e instanceof ApiError) {
+      if (e.status === 401) {
+        toastError('Sua sessão expirou. Faça login novamente.', 'Sessão inválida')
+        await logout()
+        setTimeout(() => router.push('/login'), 1500)
+      } else if (e.status === 403) {
+        toastError('Você não tem permissão para excluir este compromisso.', 'Acesso negado')
+      } else {
+        toastError('Não foi possível excluir o compromisso.', 'Erro ao excluir')
+      }
+    } else {
+      toastError('Erro de conexão. Não foi possível excluir o compromisso.', 'Erro ao excluir')
+    }
   }
 }
 
@@ -309,6 +341,7 @@ function handleSlotClick(date: Date) {
       :agenda-id="agendaIdParaCriacao"
       :agenda-tipo="agendaAtiva?.tipo ?? null"
       :can-create="canCreate"
+      :save-error="modalSaveError"
       @close="closeModal"
       @save="handleSave"
       @delete="handleDelete"

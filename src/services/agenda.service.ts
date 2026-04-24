@@ -85,6 +85,25 @@ export interface CompromissoPayloadAPI {
 
 const SESSION_STORAGE_KEY = 'sri-agenda:sessionId'
 
+// =============================================================================
+// ERROS DE API
+// =============================================================================
+
+/**
+ * Erro tipado lançado quando a API retorna status >= 400.
+ * Permite que chamadores diferenciem 401 (sessão expirada), 403 (sem permissão)
+ * e outros erros sem fazer parsing de mensagem de texto.
+ */
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // Inclui X-Session-Id automaticamente quando há sessão ativa, sem exigir que
   // cada chamador conheça o localStorage. Chamadas de auth que já enviam o header
@@ -99,7 +118,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new Error(`API ${res.status}: ${body}`)
+    throw new ApiError(res.status, `API ${res.status}: ${body}`)
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
